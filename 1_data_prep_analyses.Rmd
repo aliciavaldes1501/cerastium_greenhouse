@@ -1,0 +1,212 @@
+---
+title: Genetic differentiation on flowering time in Cerastium fontanum using a greenhouse
+  experiment
+author: "Alicia Valdés"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    df_print: paged
+  pdf_document:
+    toc: yes
+    toc_depth: 4
+subtitle: Data preparation and first analyses
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+options(tibble.width = Inf)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r load packages, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(RColorBrewer)
+library(ggeffects)
+library(glmmTMB)
+library(car)
+library(sjPlot)
+library(jtools)
+library(broom)
+library(broom.mixed)
+library(knitr)
+```
+
+```{r Define ggplot themes and palettes, include=FALSE}
+my_theme <- function(){
+  theme_base()+theme(plot.background=element_rect(fill="white", colour=NA))+
+  theme(legend.position="none")+theme(text=element_text(family="serif"))+
+  theme(plot.title = element_text(hjust =-0.06))
+}
+my_theme_legend <- function(){
+  theme_base()+theme(plot.background=element_rect(fill="white", colour=NA))+
+  theme(text=element_text(family="serif"))+
+  theme(plot.title = element_text(hjust =-0.06))
+}
+myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
+```
+
+# Data preparation
+
+## Read data from Excel files
+
+```{r}
+data_exp<-read_excel("data/edited/Cerastium_greenhouse_spring_2022.xlsx", 
+                       sheet="extracted_data")
+data_exp$treat<-as.factor(data_exp$treat)
+data_exp$mother<-as.factor(data_exp$mother)
+data_exp$father<-as.factor(data_exp$father)
+data_exp$total_n_fl<-as.integer(data_exp$total_n_fl)
+data_exp$date50<-as.numeric(data_exp$date50)
+```
+
+```{r}
+data_parents<-read_excel("data/edited/Cerastium_greenhouse_spring_2022.xlsx", 
+                       sheet="extracted_data_parents")
+data_parents$treat<-as.factor(data_parents$treat)
+```
+
+```{r}
+head(data_exp)
+head(data_parents)
+```
+
+## How many different mothers and fathers?
+
+```{r}
+length(levels(data_exp$mother)) # 25 different mothers (shouldn't it be 24?)
+length(levels(data_exp$father)) # 24 different mothers
+```
+
+## How many unique combinations of mothers and fathers?
+
+```{r}
+data_exp<-data_exp%>%mutate(mother_father=paste(mother,father,sep="_"))
+```
+
+```{r}
+length(unique(data_exp$mother_father)) # 100 (shouldn't it be 96?)
+# It is really 99, because one is "NA_NA"
+```
+
+## Number of plants from each crossing
+
+```{r}
+data_exp%>%group_by(mother_father)%>%summarise(num=n())%>%
+  ggplot(aes(x=num))+geom_histogram(bins=12)
+```
+
+12 plants from most crossings, but also one with 13 and some with fewer.
+
+# Distributions
+
+```{r}
+hist(data_exp$FFD)
+hist(data_exp$LFD)
+hist(data_exp$date50)
+```
+
+All looking quite normal.
+
+# Analyses
+
+## With offspring from crosses
+
+```{r}
+model_offpsring_FFD<-glmmTMB(FFD~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father),data_exp)
+model_offpsring_LFD<-glmmTMB(LFD~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father),data_exp)
+model_offpsring_date50<-glmmTMB(date50~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father),data_exp)
+```
+
+```{r eval=FALSE, include=FALSE}
+kable(tidy(model_offpsring_FFD),digits=c(3,3,2,3))
+kable(tidy(model_offpsring_LFD),digits=c(3,3,2,3))
+kable(tidy(model_offpsring_date50),digits=c(3,3,2,3))
+```
+
+Save models as HTML table
+
+```{r}
+tab_model(model_offpsring_FFD,model_offpsring_LFD,model_offpsring_date50,
+          transform=NULL,show.ci=F,show.se=T,show.stat=T,digits=3,
+          dv.labels=c("FFD","LFD","date50"),
+          file="output/tables/Table_models_offspring.html",
+          title="Models offspring")
+```
+
+Only effects of treatment are significant for FFD and LFD, also temp_father for date 50.
+
+Plot predictions of significant effects
+
+```{r}
+plot(ggpredict(model_offpsring_FFD,terms=c("treat")))
+plot(ggpredict(model_offpsring_LFD,terms=c("treat")))
+plot(ggpredict(model_offpsring_date50,terms=c("treat")))
+plot(ggpredict(model_offpsring_date50,terms=c("temp_father")))
+```
+
+Plot predictions of interactions (NS)
+
+```{r}
+plot(ggpredict(model_offpsring_FFD,terms=c("temp_mother","treat")))
+plot(ggpredict(model_offpsring_LFD,terms=c("temp_mother","treat")))
+plot(ggpredict(model_offpsring_date50,terms=c("temp_mother","treat")))
+plot(ggpredict(model_offpsring_FFD,terms=c("temp_father","treat")))
+plot(ggpredict(model_offpsring_LFD,terms=c("temp_father","treat")))
+plot(ggpredict(model_offpsring_date50,terms=c("temp_father","treat")))
+```
+
+## With parents
+
+```{r}
+model_parents_FFD<-lm(FFD~temp*treat,data_parents)
+model_parents_LFD<-lm(LFD~temp*treat,data_parents)
+model_parents_date50<-lm(date50~temp*treat,data_parents)
+```
+
+```{r eval=FALSE, include=FALSE}
+kable(tidy(model_parents_FFD),digits=c(3,3,2,3))
+kable(tidy(model_parents_LFD),digits=c(3,3,2,3))
+kable(tidy(model_parents_date50),digits=c(3,3,2,3))
+```
+
+Save models as HTML table
+
+```{r}
+tab_model(model_parents_FFD,model_parents_LFD,model_parents_date50,
+          transform=NULL,show.ci=F,show.se=T,show.stat=T,digits=3,
+          dv.labels=c("FFD","LFD","date50"),
+          file="output/tables/Table_models_parents.html",
+          title="Models parents")
+```
+
+Only effects of treatment are significant for FFD and LFD, also temp for date 50 (p=0.066 for temp in the model for LFD).
+
+Plot predictions of significant effects
+
+```{r}
+plot(ggpredict(model_parents_FFD,terms=c("treat")))
+plot(ggpredict(model_parents_LFD,terms=c("treat")))
+plot(ggpredict(model_parents_date50,terms=c("treat")))
+plot(ggpredict(model_parents_date50,terms=c("temp")))
+```
+
+Plot predictions of interactions (NS)
+
+```{r}
+plot(ggpredict(model_parents_FFD,terms=c("temp","treat")))
+plot(ggpredict(model_parents_LFD,terms=c("temp","treat")))
+plot(ggpredict(model_parents_date50,terms=c("temp","treat")))
+```
+
+# Session info
+
+```{r}
+sessionInfo()
+```
