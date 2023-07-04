@@ -11,6 +11,9 @@ output:
   pdf_document:
     toc: yes
     toc_depth: 4
+  word_document:
+    toc: yes
+    toc_depth: '4'
 subtitle: Data preparation and first analyses
 editor_options:
   chunk_output_type: inline
@@ -33,6 +36,15 @@ library(jtools)
 library(broom)
 library(broom.mixed)
 library(knitr)
+library(lme4)
+library(gridExtra)
+library(ggthemes)
+library(kableExtra)
+library(ggpubr)
+library(fullfact)
+library(brms)
+library(nadiv)
+library(MCMCglmm)
 ```
 
 ```{r Define ggplot themes and palettes, include=FALSE}
@@ -54,24 +66,54 @@ myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
 ## Read data from Excel files
 
 ```{r}
-data_exp<-read_excel("data/edited/Cerastium_greenhouse_spring_2022.xlsx", 
+data_exp<-read_excel("data/edited/Cerastium_greenhouse_spring_2022_editedAV.xlsx", 
                        sheet="extracted_data")
 data_exp$treat<-as.factor(data_exp$treat)
 data_exp$mother<-as.factor(data_exp$mother)
 data_exp$father<-as.factor(data_exp$father)
 data_exp$total_n_fl<-as.integer(data_exp$total_n_fl)
 data_exp$date50<-as.numeric(data_exp$date50)
+data_exp$unique_id<-as.factor(data_exp$unique_id)
+data_exp<-data_exp%>%filter(unique_id!="122/144_41") 
+# Remove one case where temperature of the parents is not known
 ```
 
 ```{r}
-data_parents<-read_excel("data/edited/Cerastium_greenhouse_spring_2022.xlsx", 
+data_selfed<-read_excel("data/edited/Cerastium_greenhouse_spring_2022_editedAV.xlsx", 
                        sheet="extracted_data_parents")
-data_parents$treat<-as.factor(data_parents$treat)
+data_selfed$treat<-as.factor(data_selfed$treat)
+data_selfed$id_parent<-as.factor(data_selfed$id_parent)
 ```
+
+```{r}
+data_shoots<-read_excel("data/edited/Cerastium_greenhouse_spring_2022_editedAV.xlsx", 
+                       sheet="extracted_data_shoots")
+data_shoots$unique_id<-as.factor(data_shoots$unique_id)
+# Dates say 2022 and that is not true, but should be OK if we need to
+# calculate differences
+```
+
+```{r}
+blocks_mothers<-read_excel("data/edited/crossing_design.xlsx", 
+                       sheet="blocks_mothers")
+blocks_fathers<-read_excel("data/edited/crossing_design.xlsx", 
+                       sheet="blocks_fathers")
+```
+
 
 ```{r}
 head(data_exp)
-head(data_parents)
+head(data_selfed)
+head(data_shoots)
+head(blocks_mothers)
+head(blocks_fathers)
+```
+
+## Unique id is unique in all cases --> Fixed
+
+```{r}
+data_exp%>%group_by(unique_id)%>%summarise(count=n())%>%filter(count>1)
+data_shoots%>%group_by(unique_id)%>%summarise(count=n())%>%filter(count>1)
 ```
 
 ## How many different mothers and fathers?
@@ -88,8 +130,7 @@ data_exp<-data_exp%>%mutate(mother_father=paste(mother,father,sep="_"))
 ```
 
 ```{r}
-length(unique(data_exp$mother_father)) # 100 (shouldn't it be 96?)
-# It is really 99, because one is "NA_NA"
+length(unique(data_exp$mother_father)) # 99 (shouldn't it be 96?)
 ```
 
 ## Number of plants from each crossing
@@ -107,40 +148,119 @@ data_exp%>%group_by(mother_father)%>%summarise(num=n())%>%
 hist(data_exp$FFD)
 hist(data_exp$LFD)
 hist(data_exp$date50)
+data_exp$duration<-data_exp$LFD-data_exp$FFD
+hist(data_exp$duration)
 ```
 
 All looking quite normal.
 
+# Shoots
+
+```{r}
+data_shoots<-data_shoots%>%mutate(day_diff=date2-date1,
+                                  mean_sh_h_date1=(sh1_date1+sh2_date1+sh3_date1)/3,
+                                  mean_sh_h_date2=(sh1_date2+sh2_date2+sh3_date2)/3,
+                                  mean_sh_growth=mean_sh_h_date2-mean_sh_h_date1)
+```
+
+```{r fig.height=2, fig.width=3}
+ggplot(data_shoots,aes(mean_sh_growth))+geom_histogram(color="black",fill="white")
+```
+
 # Analyses
 
-## With offspring from crosses
+## With selfed progeny
+
+```{r}
+length(levels(data_selfed$id_parent))
+```
+
+Selfed offpsring from 42 maternal families. id_parent is mother and father. Temp is temperature of the "grandmother" of the plant.
+
+```{r}
+data_selfed%>%group_by(id_parent,treat)%>%
+  summarise(mean=mean(FFD),sd=sd(FFD))%>%
+  ggplot(aes(x=treat,y=mean,group=id_parent,color=id_parent,label=id_parent))+
+  geom_line()+geom_label()+ylab("FFD")
+data_selfed%>%group_by(id_parent,treat)%>%
+  summarise(mean=mean(LFD),sd=sd(LFD))%>%
+  ggplot(aes(x=treat,y=mean,group=id_parent,color=id_parent,label=id_parent))+
+  geom_line()+geom_label()+ylab("LFD")
+data_selfed%>%group_by(id_parent,treat)%>%
+  summarise(mean=mean(date50),sd=sd(date50))%>%
+  ggplot(aes(x=treat,y=mean,group=id_parent,color=id_parent,label=id_parent))+
+  geom_line()+geom_label()+ylab("date50")
+```
+
+Differences in RNs between the 42 maternal lines?
+
+2-3 look quite different in the plots above.
+
+```{r}
+model_selfed_FFD_1<-lm(FFD~id_parent*treat,data_selfed)
+model_selfed_LFD_1<-lm(LFD~id_parent*treat,data_selfed)
+model_selfed_date50_1<-lm(date50~id_parent*treat,data_selfed)
+Anova(model_selfed_FFD_1)
+Anova(model_selfed_LFD_1)
+Anova(model_selfed_date50_1)
+```
+
+This suggests that there are no significant differences among individuals in the slope of the RNs. But there are differences in RN elevation.
+
+Differences in RNs depend on origin temperature?
+
+
+```{r}
+model_selfed_FFD_2<-glmmTMB(FFD~temp*treat+(1|id_parent),data_selfed)
+model_selfed_LFD_2<-glmmTMB(LFD~temp*treat+(1|id_parent),data_selfed)
+model_selfed_date50_2<-glmmTMB(date50~temp*treat+(1|id_parent),data_selfed)
+Anova(model_selfed_FFD_2)
+Anova(model_selfed_LFD_2)
+Anova(model_selfed_date50_2)
+```
+
+For LFD and date 50, differences in elevation related to origin temperature. No differences in slope.
+
+```{r}
+plot(ggpredict(model_selfed_FFD_2,terms=c("temp")))
+plot(ggpredict(model_selfed_LFD_2,terms=c("temp")))
+plot(ggpredict(model_selfed_date50_2,terms=c("temp")))
+```
+
+
+
+## With progeny from crossings
+
+### Flowering phenology
+
+#### Temperature mother + father
+
+Including mother, father and crossing as random factors.
 
 ```{r}
 model_offpsring_FFD<-glmmTMB(FFD~(temp_mother+temp_father)*treat+
-                               (1|mother)+(1|father),data_exp)
+                               (1|mother)+(1|father)+(1|mother_father),data_exp)
 model_offpsring_LFD<-glmmTMB(LFD~(temp_mother+temp_father)*treat+
-                               (1|mother)+(1|father),data_exp)
+                               (1|mother)+(1|father)+(1|mother_father),data_exp)
 model_offpsring_date50<-glmmTMB(date50~(temp_mother+temp_father)*treat+
-                               (1|mother)+(1|father),data_exp)
-```
-
-```{r eval=FALSE, include=FALSE}
-kable(tidy(model_offpsring_FFD),digits=c(3,3,2,3))
-kable(tidy(model_offpsring_LFD),digits=c(3,3,2,3))
-kable(tidy(model_offpsring_date50),digits=c(3,3,2,3))
+                               (1|mother)+(1|father)+(1|mother_father),data_exp)
+model_offpsring_duration<-glmmTMB(duration~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father)+(1|mother_father),data_exp)
 ```
 
 Save models as HTML table
 
 ```{r}
 tab_model(model_offpsring_FFD,model_offpsring_LFD,model_offpsring_date50,
+          model_offpsring_duration,
           transform=NULL,show.ci=F,show.se=T,show.stat=T,digits=3,
-          dv.labels=c("FFD","LFD","date50"),
-          file="output/tables/Table_models_offspring.html",
-          title="Models offspring")
+          dv.labels=c("FFD","LFD","date50","duration"),
+          file="output/tables/Table_models_fl_phen.html",
+          title="Models flowering phenology")
 ```
 
-Only effects of treatment are significant for FFD and LFD, also temp_father for date 50.
+Only effects of treatment are significant for FFD and LFD, also temp_father for date50.
+No significant effect of treatment on duration.
 
 Plot predictions of significant effects
 
@@ -162,48 +282,1433 @@ plot(ggpredict(model_offpsring_LFD,terms=c("temp_father","treat")))
 plot(ggpredict(model_offpsring_date50,terms=c("temp_father","treat")))
 ```
 
-## With parents
+#### Mean temperature mother & father
 
 ```{r}
-model_parents_FFD<-lm(FFD~temp*treat,data_parents)
-model_parents_LFD<-lm(LFD~temp*treat,data_parents)
-model_parents_date50<-lm(date50~temp*treat,data_parents)
+data_exp$mean_temp_parents<-with(data_exp,(temp_mother+temp_father)/2)
 ```
 
-```{r eval=FALSE, include=FALSE}
-kable(tidy(model_parents_FFD),digits=c(3,3,2,3))
-kable(tidy(model_parents_LFD),digits=c(3,3,2,3))
-kable(tidy(model_parents_date50),digits=c(3,3,2,3))
+```{r}
+model_offpsring_FFD_mean<-glmmTMB(FFD~mean_temp_parents*treat+
+                               (1|mother)+(1|father)+(1|mother_father),data_exp)
+model_offpsring_LFD_mean<-glmmTMB(LFD~mean_temp_parents*treat+
+                               (1|mother)+(1|father)+(1|mother_father),data_exp)
+model_offpsring_date50_mean<-glmmTMB(date50~mean_temp_parents*treat+
+                               (1|mother)+(1|father)+(1|mother_father),data_exp)
+model_offpsring_duration_mean<-glmmTMB(duration~mean_temp_parents*treat+
+                               (1|mother)+(1|father)+(1|mother_father),data_exp)
 ```
 
 Save models as HTML table
 
 ```{r}
-tab_model(model_parents_FFD,model_parents_LFD,model_parents_date50,
+tab_model(model_offpsring_FFD_mean,model_offpsring_LFD_mean,model_offpsring_date50_mean,
+          model_offpsring_duration_mean,
           transform=NULL,show.ci=F,show.se=T,show.stat=T,digits=3,
-          dv.labels=c("FFD","LFD","date50"),
-          file="output/tables/Table_models_parents.html",
-          title="Models parents")
+          dv.labels=c("FFD","LFD","date50","duration"),
+          file="output/tables/Table_models_fl_phen_mean.html",
+          title="Models flowering phenology with mean temperature of parents")
 ```
 
-Only effects of treatment are significant for FFD and LFD, also temp for date 50 (p=0.066 for temp in the model for LFD).
+Only effects of treatment are significant for FFD and LFD, also mean_temp_parents for date50.
+
+No significant effect of treatment on duration.
 
 Plot predictions of significant effects
 
 ```{r}
-plot(ggpredict(model_parents_FFD,terms=c("treat")))
-plot(ggpredict(model_parents_LFD,terms=c("treat")))
-plot(ggpredict(model_parents_date50,terms=c("treat")))
-plot(ggpredict(model_parents_date50,terms=c("temp")))
+plot(ggpredict(model_offpsring_FFD_mean,terms=c("treat")))
+plot(ggpredict(model_offpsring_LFD_mean,terms=c("treat")))
+plot(ggpredict(model_offpsring_date50_mean,terms=c("treat")))
+plot(ggpredict(model_offpsring_date50_mean,terms=c("mean_temp_parents")))
 ```
 
 Plot predictions of interactions (NS)
 
 ```{r}
-plot(ggpredict(model_parents_FFD,terms=c("temp","treat")))
-plot(ggpredict(model_parents_LFD,terms=c("temp","treat")))
-plot(ggpredict(model_parents_date50,terms=c("temp","treat")))
+plot(ggpredict(model_offpsring_FFD_mean,terms=c("mean_temp_parents","treat")))
+plot(ggpredict(model_offpsring_LFD_mean,terms=c("mean_temp_parents","treat")))
+plot(ggpredict(model_offpsring_date50_mean,terms=c("mean_temp_parents","treat")))
 ```
+
+### Vegetative phenology
+
+Join shoot data.
+
+```{r}
+data_exp<-data_exp%>%left_join(data_shoots%>%select(unique_id,mean_sh_growth))
+```
+
+#### Temperature mother + father
+
+Including mother, father and crossing as random factors.
+
+```{r}
+model_offpsring_veg_phen<-glmmTMB(mean_sh_growth~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father)+(1|mother_father),data_exp)
+```
+
+Save models as HTML table
+
+```{r}
+tab_model(model_offpsring_veg_phen,
+          transform=NULL,show.ci=F,show.se=T,show.stat=T,digits=3,
+          dv.labels=c("Mean shoot growth"),
+          file="output/tables/Table_models_veg_phen.html",
+          title="Models vegetative phenology")
+```
+
+No significant effects (temp_father, p =0.096).
+
+#### Mean temperature mother & father
+
+```{r}
+model_offpsring_veg_phen_mean<-glmmTMB(mean_sh_growth~mean_temp_parents*treat+
+                               (1|mother)+(1|father)+(1|mother_father),data_exp)
+```
+
+Save models as HTML table
+
+```{r}
+tab_model(model_offpsring_veg_phen_mean,
+          transform=NULL,show.ci=F,show.se=T,show.stat=T,digits=3,
+          dv.labels=c("Mean shoot growth"),
+          file="output/tables/Table_models_veg_phen_mean.html",
+          title="Models vegetative phenology with mean temperature of parents")
+```
+
+No significant effects
+
+### Heritability (Elsa's code)
+
+#### All individuals, no treatment effect
+
+Construct models
+
+```{r}
+model_her_FFD<-lmer(FFD~(1|father)+(1|mother),data_exp,REML=T)
+model_her_LFD<-lmer(LFD~(1|father)+(1|mother),data_exp,REML=T)
+model_her_date50<-lmer(date50~(1|father)+(1|mother),data_exp,REML=T)
+model_her_duration<-lmer(duration~(1|father)+(1|mother),data_exp,REML=T)
+summary(model_her_FFD)
+summary(model_her_LFD)
+summary(model_her_date50)
+summary(model_her_duration)
+```
+
+Likelihood ratio test
+
+```{r}
+model_her_FFD_LR<-lmer(FFD~(1|father)+(1|mother),data_exp,REML=F)
+model_her_LFD_LR<-lmer(LFD~(1|father)+(1|mother),data_exp,REML=F)
+model_her_date50_LR<-lmer(date50~(1|father)+(1|mother),data_exp,REML=F)
+model_her_duration_LR<-lmer(duration~(1|father)+(1|mother),data_exp,REML=F)
+# REML=FALSE because we want to compare models on likelihood  
+
+# model without random (father)
+model_her_FFD_LR_mother<-lmer(FFD~(1|mother),data_exp,REML=F)
+model_her_LFD_LR_mother<-lmer(LFD~(1|mother),data_exp,REML=F)
+model_her_date50_LR_mother<-lmer(date50~(1|mother),data_exp,REML=F)
+model_her_duration_LR_mother<-lmer(duration~(1|mother),data_exp,REML=F)
+
+# model without random (mother)
+model_her_FFD_LR_father<-lmer(FFD~(1|father),data_exp,REML=F)
+model_her_LFD_LR_father<-lmer(LFD~(1|father),data_exp,REML=F)
+model_her_date50_LR_father<-lmer(date50~(1|father),data_exp,REML=F)
+model_her_duration_LR_father<-lmer(duration~(1|father),data_exp,REML=F)
+
+# Father effect? Yes, in FFD, date50 and duration
+anova(model_her_FFD_LR_mother, model_her_FFD_LR)
+anova(model_her_LFD_LR_mother, model_her_LFD_LR)
+anova(model_her_date50_LR_mother, model_her_date50_LR)
+anova(model_her_duration_LR_mother, model_her_duration_LR)
+
+# Mother effect? Yes, in FFD, LFD, date50 and duration
+anova(model_her_FFD_LR_father, model_her_FFD_LR)
+anova(model_her_LFD_LR_father, model_her_LFD_LR)
+anova(model_her_date50_LR_father, model_her_date50_LR)
+anova(model_her_duration_LR_father, model_her_duration_LR)
+```
+
+Variance components
+
+```{r}
+# extract variance components
+Variance_FFD <- as.data.frame(VarCorr(model_her_FFD))[,c(1,4)] 
+Variance_LFD <- as.data.frame(VarCorr(model_her_LFD))[,c(1,4)] 
+Variance_date50 <- as.data.frame(VarCorr(model_her_date50))[,c(1,4)] 
+Variance_duration <- as.data.frame(VarCorr(model_her_duration))[,c(1,4)] 
+# Intra-class correlation
+PropVar_FFD <- Variance_FFD%>%mutate(propvar=vcov/sum(vcov))
+PropVar_LFD <- Variance_LFD%>%mutate(propvar=vcov/sum(vcov))
+PropVar_date50 <- Variance_date50%>%mutate(propvar=vcov/sum(vcov))
+PropVar_duration <- Variance_duration%>%mutate(propvar=vcov/sum(vcov))
+# Proportional variance
+
+PropVar_FFD
+PropVar_LFD
+PropVar_date50
+PropVar_duration
+```
+
+Heritability and maternal effects
+
+```{r}
+# h^2 (paternal effects)
+4*subset(PropVar_FFD,grp=="father")[3]
+4*subset(PropVar_LFD,grp=="father")[3]
+4*subset(PropVar_date50,grp=="father")[3]
+4*subset(PropVar_duration,grp=="father")[3]
+# Because the additive genetic variance, VA,
+# is expected to be four times the among pollen‐donor variance 
+# (Falconer & Mackay, 1996; Lynch & Walsh, 1998)
+```
+```{r}
+# maternal effects
+
+# Maternal - paternal
+# ----------------------
+# summed effects
+
+# Because the pollen‐recipient variance component contains a combination of
+# genetic and environmental effects, we subtracted the additive genetic 
+# (pollen donor) component from the pollen-recipient variance component
+# before dividing the resulting estimate by VP to estimate 
+# m2 (m2 = (Vpollen recipient − Vpollen donor)/VP).
+
+(subset(Variance_FFD,grp=="mother")[2]-subset(Variance_FFD,grp=="father")[2])/
+  Variance_FFD%>%summarise(sum(vcov))
+(subset(Variance_LFD,grp=="mother")[2]-subset(Variance_LFD,grp=="father")[2])/
+  Variance_LFD%>%summarise(sum(vcov))
+(subset(Variance_date50,grp=="mother")[2]-subset(Variance_date50,grp=="father")[2])/
+  Variance_date50%>%summarise(sum(vcov))
+(subset(Variance_duration,grp=="mother")[2]-subset(Variance_duration,grp=="father")[2])/
+  Variance_duration%>%summarise(sum(vcov))
+```
+
+Additive genetic effects explained 4.0 / 1.8 / 2.5 / 6.2 % of the variation in FFD / LFD / date50 / duration among sibling plants (σ2 pollen donor = 3.5 / 2.1 / 1,68 / 8.5, Likelihood ratio test, χ2 = 10.7 / 2.6 / 5.4 / 20.7, p = 0.001 / 0.109 / 0,020 < 0.001). Maternal non‐genetic effects explained 13.1 / 5.3 / 12.7 / 9.9 % of the variation in FFD / LFD / date50 among sibling plants (σ2 pollen recipient = 11.4 / 6.3 / 8.7 / 13.6, Likelihood ratio test, χ2 = 60.1 / 13.7 / 52.0 / 41.2, p < 0.001). The remaining 82.9 / 92.3 / 84.8 / 83.9 % of the variation in FFD / LFD / date50 / duration was attributable to environmental (residual) effects.
+h2? m2?
+
+#### All individuals, treatment effect and interaction
+
+Construct models
+
+```{r}
+model_her_FFD_treat<-lmer(FFD~treat+(1|treat:father)+(1|treat:mother),
+                          data_exp,REML=T)
+model_her_LFD_treat<-lmer(LFD~treat+(1|treat:father)+(1|treat:mother),
+                          data_exp,REML=T)
+model_her_date50_treat<-lmer(date50~treat+(1|treat:father)+(1|treat:mother),
+                             data_exp,REML=T)
+model_her_duration_treat<-lmer(duration~treat+(1|treat:father)+(1|treat:mother),
+                               data_exp,REML=T)
+summary(model_her_FFD_treat)
+summary(model_her_LFD_treat)
+summary(model_her_date50_treat)
+summary(model_her_duration_treat)
+```
+
+Likelihood ratio test
+
+```{r}
+model_her_FFD_treat_LR<-lmer(FFD~treat+(1|treat:father)+(1|treat:mother),
+                             data_exp,REML=F)
+model_her_LFD_treat_LR<-lmer(LFD~treat+(1|treat:father)+(1|treat:mother),
+                             data_exp,REML=F)
+model_her_date50_treat_LR<-lmer(date50~treat+(1|treat:father)+(1|treat:mother),
+                             data_exp,REML=F)
+model_her_duration_treat_LR<-lmer(duration~treat+(1|treat:father)+(1|treat:mother),
+                             data_exp,REML=F)
+# REML=FALSE because we want to compare models on likelihood  
+
+# model without random (father)
+model_her_FFD_treat_LR_mother<-lmer(FFD~treat+(1|treat:mother),data_exp,REML=F)
+model_her_LFD_treat_LR_mother<-lmer(LFD~treat+(1|treat:mother),data_exp,REML=F)
+model_her_date50_treat_LR_mother<-lmer(date50~treat+(1|treat:mother),data_exp,REML=F)
+model_her_duration_treat_LR_mother<-lmer(duration~treat+(1|treat:mother),data_exp,REML=F)
+
+# model without random (mother)
+model_her_FFD_treat_LR_father<-lmer(FFD~treat+(1|treat:father),data_exp,REML=F)
+model_her_LFD_treat_LR_father<-lmer(LFD~treat+(1|treat:father),data_exp,REML=F)
+model_her_date50_treat_LR_father<-lmer(date50~treat+(1|treat:father),data_exp,REML=F)
+model_her_duration_treat_LR_father<-lmer(duration~treat+(1|treat:father),data_exp,REML=F)
+
+# Father effect? Yes, in FFD, date50 and duration
+anova(model_her_FFD_treat_LR_mother, model_her_FFD_treat_LR)
+anova(model_her_LFD_treat_LR_mother, model_her_LFD_treat_LR)
+anova(model_her_date50_treat_LR_mother, model_her_date50_treat_LR)
+anova(model_her_duration_treat_LR_mother, model_her_duration_treat_LR)
+
+# Mother effect? Yes, in FFD, LFD, date50 and duration
+anova(model_her_FFD_treat_LR_father, model_her_FFD_treat_LR)
+anova(model_her_LFD_treat_LR_father, model_her_LFD_treat_LR)
+anova(model_her_date50_treat_LR_father, model_her_date50_treat_LR)
+anova(model_her_duration_treat_LR_father, model_her_duration_treat_LR)
+```
+
+Variance components
+
+```{r}
+# extract variance components
+Variance_FFD_treat <- as.data.frame(VarCorr(model_her_FFD_treat))[,c(1,4)] 
+Variance_LFD_treat <- as.data.frame(VarCorr(model_her_LFD_treat))[,c(1,4)] 
+Variance_date50_treat <- as.data.frame(VarCorr(model_her_date50_treat))[,c(1,4)] 
+Variance_duration_treat <- as.data.frame(VarCorr(model_her_duration_treat))[,c(1,4)] 
+
+# Intra-class correlation
+PropVar_FFD_treat <- Variance_FFD_treat%>%mutate(propvar=vcov/sum(vcov))
+PropVar_LFD_treat <- Variance_LFD_treat%>%mutate(propvar=vcov/sum(vcov))
+PropVar_date50_treat <- Variance_date50_treat%>%mutate(propvar=vcov/sum(vcov))
+PropVar_duration_treat <- Variance_duration_treat%>%mutate(propvar=vcov/sum(vcov))
+
+# Proportional variance
+
+PropVar_FFD_treat
+PropVar_LFD_treat
+PropVar_date50_treat
+PropVar_duration_treat
+```
+
+Heritability and maternal effects
+
+```{r}
+# h^2 (paternal effects)
+4*subset(PropVar_FFD_treat,grp=="treat:father")[3]
+4*subset(PropVar_LFD_treat,grp=="treat:father")[3]
+4*subset(PropVar_date50_treat,grp=="treat:father")[3]
+4*subset(PropVar_duration_treat,grp=="treat:father")[3]
+# Because the additive genetic variance, VA,
+# is expected to be four times the among pollen‐donor variance 
+# (Falconer & Mackay, 1996; Lynch & Walsh, 1998)
+```
+
+```{r}
+# maternal effects
+
+# Maternal - paternal
+# ----------------------
+# summed effects
+
+# Because the pollen‐recipient variance component contains a combination of
+# genetic and environmental effects, we subtracted the additive genetic 
+# (pollen donor) component from the pollen-recipient variance component
+# before dividing the resulting estimate by VP to estimate 
+# m2 (m2 = (Vpollen recipient − Vpollen donor)/VP).
+
+(subset(Variance_FFD_treat,grp=="treat:mother")[2]-subset(Variance_FFD_treat,grp=="treat:father")[2])/
+  Variance_FFD_treat%>%summarise(sum(vcov))
+(subset(Variance_LFD_treat,grp=="treat:mother")[2]-subset(Variance_LFD_treat,grp=="treat:father")[2])/
+  Variance_LFD_treat%>%summarise(sum(vcov))
+(subset(Variance_date50_treat,grp=="treat:mother")[2]-subset(Variance_date50_treat,grp=="treat:father")[2])/
+  Variance_date50_treat%>%summarise(sum(vcov))
+(subset(Variance_duration_treat,grp=="treat:mother")[2]-subset(Variance_duration_treat,grp=="treat:father")[2])/
+  Variance_duration_treat%>%summarise(sum(vcov))
+```
+
+#### Separately for each treatment
+
+##### Unheated treatment
+
+Construct models
+
+```{r}
+model_her_FFD_UH<-lmer(FFD~(1|father)+(1|mother),
+                       subset(data_exp,treat=="unheated"),REML=T)
+model_her_LFD_UH<-lmer(LFD~(1|father)+(1|mother),
+                    subset(data_exp,treat=="unheated"),REML=T)
+model_her_date50_UH<-lmer(date50~(1|father)+(1|mother),
+                       subset(data_exp,treat=="unheated"),REML=T)
+model_her_duration_UH<-lmer(duration~(1|father)+(1|mother),
+                         subset(data_exp,treat=="unheated"),REML=T)
+summary(model_her_FFD_UH)
+summary(model_her_LFD_UH)
+summary(model_her_date50_UH)
+summary(model_her_duration_UH)
+```
+
+Likelihood ratio test
+
+```{r}
+model_her_FFD_LR_UH<-lmer(FFD~(1|father)+(1|mother),
+                          subset(data_exp,treat=="unheated"),REML=F)
+model_her_LFD_LR_UH<-lmer(LFD~(1|father)+(1|mother),
+                          subset(data_exp,treat=="unheated"),REML=F)
+model_her_date50_LR_UH<-lmer(date50~(1|father)+(1|mother),
+                             subset(data_exp,treat=="unheated"),REML=F)
+model_her_duration_LR_UH<-lmer(duration~(1|father)+(1|mother),
+                               subset(data_exp,treat=="unheated"),REML=F)
+# REML=FALSE because we want to compare models on likelihood  
+
+# model without random (father)
+model_her_FFD_LR_mother_UH<-lmer(FFD~(1|mother),
+                                 subset(data_exp,treat=="unheated"),REML=F)
+model_her_LFD_LR_mother_UH<-lmer(LFD~(1|mother),
+                                 subset(data_exp,treat=="unheated"),REML=F)
+model_her_date50_LR_mother_UH<-lmer(date50~(1|mother),
+                                    subset(data_exp,treat=="unheated"),REML=F)
+model_her_duration_LR_mother_UH<-lmer(duration~(1|mother),
+                                      subset(data_exp,treat=="unheated"),REML=F)
+
+# model without random (mother)
+model_her_FFD_LR_father_UH<-lmer(FFD~(1|father),
+                                 subset(data_exp,treat=="unheated"),REML=F)
+model_her_LFD_LR_father_UH<-lmer(LFD~(1|father),
+                                 subset(data_exp,treat=="unheated"),REML=F)
+model_her_date50_LR_father_UH<-lmer(date50~(1|father),
+                                    subset(data_exp,treat=="unheated"),REML=F)
+model_her_duration_LR_father_UH<-lmer(duration~(1|father),
+                                      subset(data_exp,treat=="unheated"),REML=F)
+
+# Father effect? Yes, in FFD, date50 and duration
+anova(model_her_FFD_LR_mother_UH, model_her_FFD_LR_UH)
+anova(model_her_LFD_LR_mother_UH, model_her_LFD_LR_UH)
+anova(model_her_date50_LR_mother_UH, model_her_date50_LR_UH)
+anova(model_her_duration_LR_mother_UH, model_her_duration_LR_UH)
+
+# Mother effect? Yes, in FFD, LFD, date50 and duration
+anova(model_her_FFD_LR_father_UH, model_her_FFD_LR_UH)
+anova(model_her_LFD_LR_father_UH, model_her_LFD_LR_UH)
+anova(model_her_date50_LR_father_UH, model_her_date50_LR_UH)
+anova(model_her_duration_LR_father_UH, model_her_duration_LR_UH)
+```
+
+Variance components
+
+```{r}
+# extract variance components
+Variance_FFD_UH <- as.data.frame(VarCorr(model_her_FFD_UH))[,c(1,4)] 
+Variance_LFD_UH <- as.data.frame(VarCorr(model_her_LFD_UH))[,c(1,4)] 
+Variance_date50_UH <- as.data.frame(VarCorr(model_her_date50_UH))[,c(1,4)] 
+Variance_duration_UH <- as.data.frame(VarCorr(model_her_duration_UH))[,c(1,4)] 
+# Intra-class correlation
+PropVar_FFD_UH <- Variance_FFD_UH%>%mutate(propvar=vcov/sum(vcov))
+PropVar_LFD_UH <- Variance_LFD_UH%>%mutate(propvar=vcov/sum(vcov))
+PropVar_date50_UH <- Variance_date50_UH%>%mutate(propvar=vcov/sum(vcov))
+PropVar_duration_UH <- Variance_duration_UH%>%mutate(propvar=vcov/sum(vcov))
+# Proportional variance
+
+PropVar_FFD_UH
+PropVar_LFD_UH
+PropVar_date50_UH
+PropVar_duration_UH
+```
+
+Heritability and maternal effects
+
+```{r}
+# h^2 (paternal effects)
+4*subset(PropVar_FFD_UH,grp=="father")[3]
+4*subset(PropVar_LFD_UH,grp=="father")[3]
+4*subset(PropVar_date50_UH,grp=="father")[3]
+4*subset(PropVar_duration_UH,grp=="father")[3]
+# Because the additive genetic variance, VA,
+# is expected to be four times the among pollen‐donor variance 
+# (Falconer & Mackay, 1996; Lynch & Walsh, 1998)
+```
+```{r}
+# maternal effects
+
+# Maternal - paternal
+# ----------------------
+# summed effects
+
+# Because the pollen‐recipient variance component contains a combination of
+# genetic and environmental effects, we subtracted the additive genetic 
+# (pollen donor) component from the pollen-recipient variance component
+# before dividing the resulting estimate by VP to estimate 
+# m2 (m2 = (Vpollen recipient − Vpollen donor)/VP).
+
+(subset(Variance_FFD_UH,grp=="mother")[2]-subset(Variance_FFD_UH,grp=="father")[2])/
+  Variance_FFD_UH%>%summarise(sum(vcov))
+(subset(Variance_LFD_UH,grp=="mother")[2]-subset(Variance_LFD_UH,grp=="father")[2])/
+  Variance_LFD_UH%>%summarise(sum(vcov))
+(subset(Variance_date50_UH,grp=="mother")[2]-subset(Variance_date50_UH,grp=="father")[2])/
+  Variance_date50_UH%>%summarise(sum(vcov))
+(subset(Variance_duration_UH,grp=="mother")[2]-subset(Variance_duration_UH,grp=="father")[2])/
+  Variance_duration_UH%>%summarise(sum(vcov))
+```
+
+##### Heated treatment
+
+Construct models
+
+```{r}
+model_her_FFD_H<-lmer(FFD~(1|father)+(1|mother),
+                       subset(data_exp,treat=="heatmat"),REML=T)
+model_her_LFD_H<-lmer(LFD~(1|father)+(1|mother),
+                    subset(data_exp,treat=="heatmat"),REML=T)
+model_her_date50_H<-lmer(date50~(1|father)+(1|mother),
+                       subset(data_exp,treat=="heatmat"),REML=T)
+model_her_duration_H<-lmer(duration~(1|father)+(1|mother),
+                         subset(data_exp,treat=="heatmat"),REML=T)
+summary(model_her_FFD_H)
+summary(model_her_LFD_H)
+summary(model_her_date50_H)
+summary(model_her_duration_H)
+```
+
+Likelihood ratio test
+
+```{r}
+model_her_FFD_LR_H<-lmer(FFD~(1|father)+(1|mother),
+                          subset(data_exp,treat=="heatmat"),REML=F)
+model_her_LFD_LR_H<-lmer(LFD~(1|father)+(1|mother),
+                          subset(data_exp,treat=="heatmat"),REML=F)
+model_her_date50_LR_H<-lmer(date50~(1|father)+(1|mother),
+                             subset(data_exp,treat=="heatmat"),REML=F)
+model_her_duration_LR_H<-lmer(duration~(1|father)+(1|mother),
+                               subset(data_exp,treat=="heatmat"),REML=F)
+# REML=FALSE because we want to compare models on likelihood  
+
+# model without random (father)
+model_her_FFD_LR_mother_H<-lmer(FFD~(1|mother),
+                                 subset(data_exp,treat=="heatmat"),REML=F)
+model_her_LFD_LR_mother_H<-lmer(LFD~(1|mother),
+                                 subset(data_exp,treat=="heatmat"),REML=F)
+model_her_date50_LR_mother_H<-lmer(date50~(1|mother),
+                                    subset(data_exp,treat=="heatmat"),REML=F)
+model_her_duration_LR_mother_H<-lmer(duration~(1|mother),
+                                      subset(data_exp,treat=="heatmat"),REML=F)
+
+# model without random (mother)
+model_her_FFD_LR_father_H<-lmer(FFD~(1|father),
+                                 subset(data_exp,treat=="heatmat"),REML=F)
+model_her_LFD_LR_father_H<-lmer(LFD~(1|father),
+                                 subset(data_exp,treat=="heatmat"),REML=F)
+model_her_date50_LR_father_H<-lmer(date50~(1|father),
+                                    subset(data_exp,treat=="heatmat"),REML=F)
+model_her_duration_LR_father_H<-lmer(duration~(1|father),
+                                      subset(data_exp,treat=="heatmat"),REML=F)
+
+# Father effect? Yes, in FFD and duration
+anova(model_her_FFD_LR_mother_H, model_her_FFD_LR_H)
+anova(model_her_LFD_LR_mother_H, model_her_LFD_LR_H)
+anova(model_her_date50_LR_mother_H, model_her_date50_LR_H)
+anova(model_her_duration_LR_mother_H, model_her_duration_LR_H)
+
+# Mother effect? Yes, in FFD, LFD, date50 and duration
+anova(model_her_FFD_LR_father_H, model_her_FFD_LR_H)
+anova(model_her_LFD_LR_father_H, model_her_LFD_LR_H)
+anova(model_her_date50_LR_father_H, model_her_date50_LR_H)
+anova(model_her_duration_LR_father_H, model_her_duration_LR_H)
+```
+
+Variance components
+
+```{r}
+# extract variance components
+Variance_FFD_H <- as.data.frame(VarCorr(model_her_FFD_H))[,c(1,4)] 
+Variance_LFD_H <- as.data.frame(VarCorr(model_her_LFD_H))[,c(1,4)] 
+Variance_date50_H <- as.data.frame(VarCorr(model_her_date50_H))[,c(1,4)] 
+Variance_duration_H <- as.data.frame(VarCorr(model_her_duration_H))[,c(1,4)] 
+# Intra-class correlation
+PropVar_FFD_H <- Variance_FFD_H%>%mutate(propvar=vcov/sum(vcov))
+PropVar_LFD_H <- Variance_LFD_H%>%mutate(propvar=vcov/sum(vcov))
+PropVar_date50_H <- Variance_date50_H%>%mutate(propvar=vcov/sum(vcov))
+PropVar_duration_H <- Variance_duration_H%>%mutate(propvar=vcov/sum(vcov))
+# Proportional variance
+
+PropVar_FFD_H
+PropVar_LFD_H
+PropVar_date50_H
+PropVar_duration_H
+```
+
+Heritability and maternal effects
+
+```{r}
+# h^2 (paternal effects)
+4*subset(PropVar_FFD_H,grp=="father")[3]
+4*subset(PropVar_LFD_H,grp=="father")[3]
+4*subset(PropVar_date50_H,grp=="father")[3]
+4*subset(PropVar_duration_H,grp=="father")[3]
+# Because the additive genetic variance, VA,
+# is expected to be four times the among pollen‐donor variance 
+# (Falconer & Mackay, 1996; Lynch & Walsh, 1998)
+```
+
+```{r}
+# maternal effects
+
+# Maternal - paternal
+# ----------------------
+# summed effects
+
+# Because the pollen‐recipient variance component contains a combination of
+# genetic and environmental effects, we subtracted the additive genetic 
+# (pollen donor) component from the pollen-recipient variance component
+# before dividing the resulting estimate by VP to estimate 
+# m2 (m2 = (Vpollen recipient − Vpollen donor)/VP).
+
+(subset(Variance_FFD_H,grp=="mother")[2]-subset(Variance_FFD_H,grp=="father")[2])/
+  Variance_FFD_H%>%summarise(sum(vcov))
+(subset(Variance_LFD_H,grp=="mother")[2]-subset(Variance_LFD_H,grp=="father")[2])/
+  Variance_LFD_H%>%summarise(sum(vcov))
+(subset(Variance_date50_H,grp=="mother")[2]-subset(Variance_date50_H,grp=="father")[2])/
+  Variance_date50_H%>%summarise(sum(vcov))
+(subset(Variance_duration_H,grp=="mother")[2]-subset(Variance_duration_H,grp=="father")[2])/
+  Variance_duration_H%>%summarise(sum(vcov))
+```
+
+#### Summary tables
+
+##### Proportions of variance
+
+```{r}
+summary_propvar<-
+rbind(rbind(PropVar_FFD%>%mutate(trait="FFD")%>%select(trait,grp,propvar),
+      PropVar_LFD%>%mutate(trait="LFD")%>%select(trait,grp,propvar),
+      PropVar_date50%>%mutate(trait="date50")%>%select(trait,grp,propvar),
+      PropVar_duration%>%mutate(trait="duration")%>%select(trait,grp,propvar))%>%
+        mutate(method="All"),
+      rbind(PropVar_FFD_treat%>%mutate(trait="FFD")%>%select(trait,grp,propvar),
+      PropVar_LFD_treat%>%mutate(trait="LFD")%>%select(trait,grp,propvar),
+      PropVar_date50_treat%>%mutate(trait="date50")%>%select(trait,grp,propvar),
+      PropVar_duration_treat%>%mutate(trait="duration")%>%select(trait,grp,propvar))%>%
+        mutate(method="All_treat"),
+      rbind(PropVar_FFD_UH%>%mutate(trait="FFD")%>%select(trait,grp,propvar),
+      PropVar_LFD_UH%>%mutate(trait="LFD")%>%select(trait,grp,propvar),
+      PropVar_date50_UH%>%mutate(trait="date50")%>%select(trait,grp,propvar),
+      PropVar_duration_UH%>%mutate(trait="duration")%>%select(trait,grp,propvar))%>%
+        mutate(method="Separate_UH"),
+      rbind(PropVar_FFD_H%>%mutate(trait="FFD")%>%select(trait,grp,propvar),
+      PropVar_LFD_H%>%mutate(trait="LFD")%>%select(trait,grp,propvar),
+      PropVar_date50_H%>%mutate(trait="date50")%>%select(trait,grp,propvar),
+      PropVar_duration_H%>%mutate(trait="duration")%>%select(trait,grp,propvar))%>%
+        mutate(method="Separate_H"))%>%
+  mutate(grp=as.factor(ifelse(grp=="treat:mother"|grp=="mother","mother",
+                              ifelse(grp=="treat:father"|grp=="father","father","Residual"))))
+summary_propvar<-summary_propvar%>%pivot_wider(names_from=trait,values_from=propvar)%>%
+  arrange(grp)
+kbl(summary_propvar,caption="Proportions of variance",digits=3) %>%
+  kable_classic(full_width=F)
+```
+
+##### Heritability
+
+```{r}
+summary_heritability<-
+rbind(tibble(method="All",
+             FFD=4*subset(PropVar_FFD,grp=="father")[,3],
+             LFD=4*subset(PropVar_LFD,grp=="father")[,3],
+             date50=4*subset(PropVar_date50,grp=="father")[,3],
+             duration=4*subset(PropVar_duration,grp=="father")[,3]),
+      tibble(method="All_treat",
+             FFD=4*subset(PropVar_FFD_treat,grp=="treat:father")[,3],
+             LFD=4*subset(PropVar_LFD_treat,grp=="treat:father")[,3],
+             date50=4*subset(PropVar_date50_treat,grp=="treat:father")[,3],
+             duration=4*subset(PropVar_duration_treat,grp=="treat:father")[,3]),
+      tibble(method="Separate_UH",
+             FFD=4*subset(PropVar_FFD_UH,grp=="father")[,3],
+             LFD=4*subset(PropVar_LFD_UH,grp=="father")[,3],
+             date50=4*subset(PropVar_date50_UH,grp=="father")[,3],
+             duration=4*subset(PropVar_duration_UH,grp=="father")[,3]),
+      tibble(method="Separate_H",
+             FFD=4*subset(PropVar_FFD_H,grp=="father")[,3],
+             LFD=4*subset(PropVar_LFD_H,grp=="father")[,3],
+             date50=4*subset(PropVar_date50_H,grp=="father")[,3],
+             duration=4*subset(PropVar_duration_H,grp=="father")[,3]))
+kbl(summary_heritability,caption="Heritabilities",digits=3) %>%
+  kable_classic(full_width=F)
+```
+
+##### Maternal effects
+
+```{r}
+summary_maternal<-
+rbind(tibble(method="All",
+             FFD=data.frame((subset(Variance_FFD,grp=="mother")[2]-
+                               subset(Variance_FFD,grp=="father")[2])/
+                              Variance_FFD%>%summarise(sum(vcov)))$vcov,
+             LFD=data.frame((subset(Variance_LFD,grp=="mother")[2]-
+                               subset(Variance_LFD,grp=="father")[2])/
+                              Variance_LFD%>%summarise(sum(vcov)))$vcov,
+             date50=data.frame((subset(Variance_date50,grp=="mother")[2]-
+                                  subset(Variance_date50,grp=="father")[2])/
+                                 Variance_date50%>%summarise(sum(vcov)))$vcov,
+             duration=data.frame((subset(Variance_duration,grp=="mother")[2]-
+                                    subset(Variance_duration,grp=="father")[2])/
+                                   Variance_duration%>%summarise(sum(vcov)))$vcov),
+      tibble(method="All_treat",
+             FFD=data.frame((subset(Variance_FFD_treat,grp=="treat:mother")[2]-
+                               subset(Variance_FFD_treat,grp=="treat:father")[2])/
+                              Variance_FFD_treat%>%summarise(sum(vcov)))$vcov,
+             LFD=data.frame((subset(Variance_LFD_treat,grp=="treat:mother")[2]-
+                               subset(Variance_LFD_treat,grp=="treat:father")[2])/
+                              Variance_LFD_treat%>%summarise(sum(vcov)))$vcov,
+             date50=data.frame((subset(Variance_date50_treat,grp=="treat:mother")[2]-
+                                  subset(Variance_date50_treat,grp=="treat:father")[2])/
+                                 Variance_date50_treat%>%summarise(sum(vcov)))$vcov,
+             duration=data.frame((subset(Variance_duration_treat,grp=="treat:mother")[2]-
+                                    subset(Variance_duration_treat,grp=="treat:father")[2])/
+                                   Variance_duration_treat%>%summarise(sum(vcov)))$vcov),
+      tibble(method="Separate_UH",
+             FFD=data.frame((subset(Variance_FFD_UH,grp=="mother")[2]-
+                               subset(Variance_FFD_UH,grp=="father")[2])/
+                              Variance_FFD_UH%>%summarise(sum(vcov)))$vcov,
+             LFD=data.frame((subset(Variance_LFD_UH,grp=="mother")[2]-
+                               subset(Variance_LFD_UH,grp=="father")[2])/
+                              Variance_LFD_UH%>%summarise(sum(vcov)))$vcov,
+             date50=data.frame((subset(Variance_date50_UH,grp=="mother")[2]-
+                                  subset(Variance_date50_UH,grp=="father")[2])/
+                                 Variance_date50_UH%>%summarise(sum(vcov)))$vcov,
+             duration=data.frame((subset(Variance_duration_UH,grp=="mother")[2]-
+                                    subset(Variance_duration_UH,grp=="father")[2])/
+                                   Variance_duration_UH%>%summarise(sum(vcov)))$vcov),
+      tibble(method="Separate_H",
+             FFD=data.frame((subset(Variance_FFD_H,grp=="mother")[2]-
+                               subset(Variance_FFD_H,grp=="father")[2])/
+                              Variance_FFD_H%>%summarise(sum(vcov)))$vcov,
+             LFD=data.frame((subset(Variance_LFD_H,grp=="mother")[2]-
+                               subset(Variance_LFD_H,grp=="father")[2])/
+                              Variance_LFD_H%>%summarise(sum(vcov)))$vcov,
+             date50=data.frame((subset(Variance_date50_H,grp=="mother")[2]-
+                                  subset(Variance_date50_H,grp=="father")[2])/
+                                 Variance_date50_H%>%summarise(sum(vcov)))$vcov,
+             duration=data.frame((subset(Variance_duration_H,grp=="mother")[2]-
+                                    subset(Variance_duration_H,grp=="father")[2])/
+                                   Variance_duration_H%>%summarise(sum(vcov)))$vcov))
+kbl(summary_maternal,caption="Maternal effects",digits=3) %>%
+  kable_classic(full_width=F)
+```
+
+# Heritability (fullfact)
+
+Using fullfact package.
+
+We have 6 replicate NCII blocks.
+
+Add block_id to the dataset
+
+```{r}
+data_exp_blocks<-data_exp%>%
+  left_join(blocks_mothers%>%mutate(mother=factor(mother)))%>%
+  left_join(blocks_fathers%>%mutate(father=factor(father)))%>%
+  # Removing 2 cases where block_mother different from block_father
+  filter(block_mother==block_father)%>% 
+  filter(mother!=39)%>% # Removed one extra mother in block 5 so far
+  mutate(block=factor(block_mother))%>%
+  select(!(block_mother:block_father))%>%
+  mutate(family=paste(mother,father,sep="_"))%>%
+  mutate(family=setNames(paste0("f",
+                                  seq_along(unique(family))),
+                           unique(family))[family])%>%
+  rename(dam=mother,sire=father)
+```
+
+## Observed variance components
+
+```{r}
+model1<- observLmer2(observ=data_exp_blocks,dam="dam",sire="sire",
+                     response="FFD",block="block")
+model1
+```
+
+## Statistical Power analysis
+
+```{r include=FALSE}
+power1<-powerLmer2(varcomp=c(11.6251571,3.3167244,0.6354871,71.96837,0.0000000),
+                   # varcomp=c(dam,sire,damxsire,residual,block)
+                   nval=c(24,24,12,6),
+                   #  sample size of dataset (dam,sire,offspring,block
+                   # Used "design" values, actual values were slightly different
+                   block=c(4,4),nsim=100)
+```
+
+```{r}
+power1
+```
+
+There is sufficient power (≥ 0.8) for dam and sire variance components, whereas there is insufficient power (< 0.8) for the dam by sire variance component.
+There was also insufficient power for block variance components. In the cases of insufficient power, the sample size of dam, sire, and/or offspring can be increased until there is sufficient power.
+
+## Bootstrap confidence intervals
+
+Confidence intervals for the additive genetic, non-additive genetic, and maternal variance components can be produced using the bootstrap-t resampling method described by Efron and Tibshirani (1993, p. 160‒162). Observations are resampled with replacement until the original sample size is reproduced. The resampled data are then used in the model and the additive genetic, non-additive genetic, and maternal variance components are extracted. The process is repeated for a number of iterations, typically 1,000 times, to produce a distribution for each component. The confidence interval lower and upper limits and median are extracted from the distribution.
+
+Efron B, Tibshirani R. 1993. An Introduction to the Bootstrap. Chapman and Hall, New York.
+
+```{r include=FALSE}
+resampFamily (dat=data.frame(data_exp_blocks),copy=c(1:2,7),family="family",
+              iter=1000) #1000 iterations
+```
+
+## Iteration variance components
+
+```{r}
+datR<- read.csv("resamp_datF.csv") #1000 iterations
+head(datR)
+```
+
+```{r}
+rcomp2<- resampLmer2(resamp=datR,dam="dam",sire="sire",response="FFD",
+                     start=1,end=1000) # Block?
+```
+
+```{r}
+FFD_ci<-ciMANA(comp=rcomp2)
+FFD_ci
+```
+
+```{r}
+boxMANA(comp=rcomp2,type="perc",yunit=20,ymax=100,cex_ylab=1.3)
+# Legend is wrong!?
+```
+
+# Heritability (animal model)
+
+Animal model = a form of a mixed model that can estimate the genetic and environmental components of phenotypic variation using pedigree data. Specifically, we used a generalized linear mixed model (GLMM) using Markov chain Monte Carlo (MCMC) in the R package MCMCglmm. These models are particularly useful for estimating genetic variance in unbalanced pedigrees such as in wild populations or a lack of a fully crossed breeding designs. Following tutorials in Wilson et al., we estimated variance components and narrow-sense heritability (h2).
+
+Question: Can we also used selfed individuals for this (in the same model)?
+
+## brms
+
+Create pedigree:
+
+```{r}
+data_ped<-data.frame(unique(select(data_exp,unique_id,mother,father)))
+```
+
+To be able to fit an animal model, brms needs the relativeness (relationship) matrix of the pedigree and not its inverse (as in other softwares). This can be estimated using the nadiv package.
+
+Create the relativeness (relationship) matrix of the pedigree:
+
+```{r}
+Amat <- as.matrix(makeA(prepPed(data_ped,check=T)))
+```
+
+### No fixed effects, only individual as random
+
+The random effect is added to the model with the term (1 | gr(animal, cov = Amat) which associates the id animal to the matrix of relativeness. 
+
+we will use the default priors so far.
+
+Specify model:
+
+```{r eval=FALSE, include=FALSE}
+brms_m1.1 <- brm(
+  FFD ~ 1 + (1 | gr(unique_id, cov = Amat)),
+  data = data_exp,
+  data2 = list(Amat = Amat),
+  family = gaussian(),
+  chains = 2, cores = 1, iter = 1000
+)
+
+save(brms_m1.1, file = "output/models/brms_m1_1.rda")
+```
+
+Model diagnostics, examine variance estimate and distributions:
+
+```{r}
+load("output/models/brms_m1_1.rda")
+plot(brms_m1.1)
+mcmc_plot(brms_m1.1, type = "acf")
+summary(brms_m1.1)
+```
+
+Rhat provides information on the estimate convergence. If it’s greater than 1, the chains have not yet converged and it will be require to run more iterations and/or set stronger priors.
+
+Calculate heritability:
+
+```{r}
+v_animal <- (VarCorr(brms_m1.1, summary = FALSE)$unique_id$sd)^2
+v_r <- (VarCorr(brms_m1.1, summary = FALSE)$residual$sd)^2
+h.FFD.1 <- as.mcmc(v_animal / (v_animal + v_r))
+summary(h.FFD.1)
+plot(h.FFD.1)
+```
+
+### Fixed effect of treatment
+
+To add effects to a univariate model, we simply modify the priors and the fixed effect portion of the model specification:
+
+```{r eval=FALSE, include=FALSE}
+brms_m1.2 <- brm(
+  FFD ~ 1 + treat + (1 | gr(unique_id, cov = Amat)),
+  data = data_exp,
+  data2 = list(Amat = Amat),
+  family = gaussian(),
+  chains = 2, cores = 2, iter = 1000
+)
+
+save(brms_m1.2, file = "output/models/brms_m1_2.rda")
+```
+
+```{r}
+load("output/models/brms_m1_2.rda")
+summary(brms_m1.2)
+plot(brms_m1.2)
+mcmc_plot(brms_m1.2, type = "pairs")
+
+summary(brms_m1.2)$fixed
+summary(brms_m1.2)$random
+```
+
+The posterior distribution of the treat term does not overlap zero. Thus, we can infer that treatment has an effect on FFD in this model and is a useful addition to the model, for most purposes. It is also worth noting that the variance components have changed slightly.
+
+In fact since treatment effects were previously contributing to the residual variance of the model our estimate of VR (denoted ’units’ in the output) is now slightly lower than before. This has an important consequence for estimating heritability since if we calculate VP as VA + VR then as we include fixed effects we will soak up more residual variance driving VP. Assuming that VA is more or less unaffected by the fixed effects fitted then as VP goes down we expect our estimate of h2 will go up (YES!).
+
+```{r}
+v_animal <- (VarCorr(brms_m1.2, summary = FALSE)$unique_id$sd)^2
+v_r <- (VarCorr(brms_m1.2, summary = FALSE)$residual$sd)^2
+h.FFD.2 <- as.mcmc(v_animal / (v_animal + v_r))
+
+summary(h.FFD.2)
+summary(h.FFD.1)
+```
+
+The first is an estimate of the proportion of variance in FFD explained by additive effects, the latter is an estimate of the proportion of variance in FFD after conditioning on treatment. 
+
+### Adding all effects
+
+```{r}
+data_exp_blocks_2<-data_exp%>%
+  left_join(blocks_mothers%>%mutate(mother=factor(mother)))%>%
+  left_join(blocks_fathers%>%mutate(father=factor(father)))%>%
+  # Removing 2 cases where block_mother different from block_father
+  filter(block_mother==block_father)%>%
+  mutate(block=factor(block_mother))%>%
+  select(!(block_mother:block_father))
+```
+
+
+```{r eval=FALSE, include=FALSE}
+brms_m1.3 <- brm(
+  FFD~ 1 + (temp_mother+temp_father)*treat + 
+    (1 | gr(unique_id, cov = Amat)) + (1 | block) + (1|mother)+(1|father),
+  # need different Amat?
+  data = data_exp_blocks_2,
+  data2 = list(Amat = Amat),
+  family = gaussian(),
+  chains = 1, cores = 4, iter = 10000
+)
+
+save(brms_m1.3, file = "output/models/brms_m1_3.rda")
+```
+
+```{r}
+load("output/models/brms_m1_3.rda")
+
+plot(brms_m1.3, ask = FALSE, N = 3)
+summary(brms_m1.3)$random
+```
+
+```{r}
+v_animal <- (VarCorr(brms_m1.3, summary = FALSE)$unique_id$sd)^2
+v_block <- (VarCorr(brms_m1.3, summary = FALSE)$block$sd)^2
+v_father <- (VarCorr(brms_m1.3, summary = FALSE)$father$sd)^2
+v_mother <- (VarCorr(brms_m1.3, summary = FALSE)$mother$sd)^2
+v_r <- (VarCorr(brms_m1.3, summary = FALSE)$residual$sd)^2
+h.FFD.3 <- as.mcmc(v_animal / (v_animal + v_block + v_father + v_mother + v_r))
+summary(h.FFD.3)
+summary(h.FFD.2)
+summary(h.FFD.1)
+```
+
+### Partitioning variance between treatments
+
+To add effects to a univariate model, we simply modify the priors and the fixed effect portion of the model specification:
+
+```{r eval=FALSE, include=FALSE}
+brms_m1.4 <- brm(
+  bf(FFD ~ 1 + treat + (0 + treat || gr(unique_id, cov = Amat)),
+     sigma ~ treat - 1),
+  # Partition the variance at different treatments
+  # With this we can estimate the treatment-specific heritability
+  data = data_exp,
+  data2 = list(Amat = Amat),
+  family = gaussian(),
+  chains = 4, cores = 4, iter = 1000
+)
+
+save(brms_m1.4, file = "output/models/brms_m1_4.rda")
+```
+
+```{r}
+load("output/models/brms_m1_4.rda")
+```
+
+```{r}
+summary(brms_m1.4)
+```
+
+```{r}
+Var.table <- as_draws_df(brms_m1.4)
+Var.table$h.FFD.h <- as.mcmc((Var.table$sd_unique_id__treatheatmat)^2 /
+                               ((Var.table$sd_unique_id__treatheatmat)^2 +
+                                  (Var.table$b_sigma_treatheatmat)^2))
+Var.table$h.FFD.uh <- as.mcmc((Var.table$sd_unique_id__treatunheated)^2 /
+                                ((Var.table$sd_unique_id__treatunheated)^2 +
+                                 (Var.table$b_sigma_treatunheated)^2))
+summary(Var.table$h.FFD.h)
+summary(Var.table$h.FFD.uh)
+plot(Var.table$h.FFD.h)
+plot(Var.table$h.FFD.uh)
+```
+
+Why so high? Must be an error!
+
+### Separate for H and UH
+
+```{r eval=FALSE, include=FALSE}
+brms_m1.5.h <- brm(
+  FFD ~ 1 + (1 | gr(unique_id, cov = Amat)),
+  data = subset(data_exp,treat=="heatmat"),
+  data2 = list(Amat = Amat),
+  family = gaussian(),
+  chains = 2, cores = 1, iter = 1000
+)
+
+save(brms_m1.5.h, file = "output/models/brms_m1.5.h.rda")
+```
+
+```{r eval=FALSE, include=FALSE}
+brms_m1.5.uh <- brm(
+  FFD ~ 1 + (1 | gr(unique_id, cov = Amat)),
+  data = subset(data_exp,treat=="unheated"),
+  data2 = list(Amat = Amat),
+  family = gaussian(),
+  chains = 2, cores = 1, iter = 1000
+)
+
+save(brms_m1.5.uh, file = "output/models/brms_m1.5.uh.rda")
+```
+
+```{r}
+load("output/models/brms_m1.5.h.rda")
+load("output/models/brms_m1.5.uh.rda")
+```
+
+```{r}
+v_animal_h <- (VarCorr(brms_m1.5.h, summary = FALSE)$unique_id$sd)^2
+v_r_h <- (VarCorr(brms_m1.5.h, summary = FALSE)$residual$sd)^2
+h.FFD.5.h <- as.mcmc(v_animal_h / (v_animal_h + v_r_h))
+summary(h.FFD.5.h)
+plot(h.FFD.5.h)
+v_animal_uh <- (VarCorr(brms_m1.5.uh, summary = FALSE)$unique_id$sd)^2
+v_r_uh <- (VarCorr(brms_m1.5.uh, summary = FALSE)$residual$sd)^2
+h.FFD.5.uh <- as.mcmc(v_animal_uh / (v_animal_uh + v_r_uh))
+summary(h.FFD.5.uh)
+plot(h.FFD.5.uh)
+```
+
+### Fixed effect of treatment + mother as random
+
+```{r eval=FALSE, include=FALSE}
+brms_m1.6 <- brm(
+  FFD~ 1 + treat + 
+    (1 | gr(unique_id, cov = Amat)) + (1|mother),
+  # need different Amat?
+  data = data_exp,
+  data2 = list(Amat = Amat),
+  family = gaussian(),
+  chains = 1, cores = 4, iter = 10000
+)
+
+save(brms_m1.6, file = "output/models/brms_m1_6.rda")
+```
+
+```{r}
+load("output/models/brms_m1.6.rda")
+```
+
+```{r}
+summary(brms_m1.6)
+```
+
+```{r}
+v_animal <- (VarCorr(brms_m1.6, summary = FALSE)$unique_id$sd)^2
+v_mother <- (VarCorr(brms_m1.6, summary = FALSE)$mother$sd)^2
+v_r <- (VarCorr(brms_m1.6, summary = FALSE)$residual$sd)^2
+h.FFD.6 <- as.mcmc(v_animal / (v_animal + v_mother +  v_r))
+m.FFD.6 <- as.mcmc(v_mother / (v_animal + v_mother + v_r))
+summary(h.FFD.6)
+summary(m.FFD.6)
+```
+
+### Only random individual and mother
+
+```{r eval=FALSE, include=FALSE}
+brms_m1.7 <- brm(
+  FFD ~ 1 + (1 | gr(unique_id, cov = Amat)) + (1|mother),
+  data = data_exp,
+  data2 = list(Amat = Amat),
+  family = gaussian(),
+  chains = 2, cores = 1, iter = 1000
+)
+
+save(brms_m1.7, file = "output/models/brms_m1_7.rda")
+```
+
+```{r}
+load("output/models/brms_m1.7.rda")
+```
+
+```{r}
+summary(brms_m1.7)
+```
+
+```{r}
+v_animal <- (VarCorr(brms_m1.7, summary = FALSE)$unique_id$sd)^2
+v_mother <- (VarCorr(brms_m1.7, summary = FALSE)$mother$sd)^2
+v_r <- (VarCorr(brms_m1.7, summary = FALSE)$residual$sd)^2
+h.FFD.7 <- as.mcmc(v_animal / (v_animal + v_mother +  v_r))
+m.FFD.7 <- as.mcmc(v_mother / (v_animal + v_mother + v_r))
+summary(h.FFD.7)
+summary(m.FFD.7)
+```
+
+Heritabilities with different models:
+
+0.355963    # only pedigree   
+
+0.548966    # fixed treat   
+
+0.146816    # all   
+
+# separate
+
+0.395575    # H
+0.63414     # UH
+
+0.313298    # fixed treat, random mother (maternal = 0.124)
+
+0.194572    # random mother (maternal = 0.08600)   
+
+### TRY models including also selfed?
+
+## MCMCglmm 1
+
+Code from https://devillemereuil.legtux.org/wp-content/uploads/2021/09/tuto_en.pdf
+
+Defining the prior (parameter expanded prior - Fisher prior)
+
+```{r}
+prior <- list(R = list(V = 1, nu = 1),
+              G = list(G1 = list(V = 1, nu = 1, alpha.mu = 0, alpha.V = 1000)))
+# R argument stands for the prior on the residual variance.
+# The G argument (itself a list) is for random effects variance 
+# (called G1, G2, etc.). 
+#In presence of 3 random effects in the model, we need to define 3 priors in G
+prior <- list(R = list(V = 1, nu = 1),
+              G = list(G1 = list(V = 1, nu = 1, alpha.mu = 0, alpha.V = 1000),
+                       G2 = list(V = 1, nu = 1, alpha.mu = 0, alpha.V = 1000),
+                       G3 = list(V = 1, nu = 1, alpha.mu = 0, alpha.V = 1000)))
+```
+
+Pedigree:
+
+```{r}
+pedigree<-prepPed(data_ped,check=T)%>%
+  rename(animal=unique_id,sire=father,dam=mother)
+```
+
+Data:
+
+```{r}
+data_animal<-data.frame(data_exp%>%rename(animal=unique_id))
+```
+
+```{r}
+prior1 <- list(R = list(V = 1, nu = 0.002),
+              G = list(G1 = list(V = 1, nu = 0.002)))
+```
+
+### Running a model
+
+```{r eval=FALSE, include=FALSE}
+MCMC1 <- MCMCglmm(FFD ~ 1, # Only intercept
+                  random = ~ animal, # Random effects: 
+                  # animal is a reserved variable to fit the additive genetic effect (in other words, we are stating the model we want to estimate 𝑉A).
+                  family = "gaussian",
+                  prior = prior1,
+                  pedigree = pedigree,
+                  data = data_animal,
+                  nitt = 1000000,
+                  burnin = 100000,
+                  thin = 10,
+                  verbose=T)
+save(MCMC1, file = "output/models/MCMC1.rda")
+```
+
+```{r}
+load("output/models/MCMC1.rda")
+```
+
+```{r}
+plot(MCMC1[["Sol"]]) # fixed effects variances
+plot(MCMC1[["VCV"]]) # random effects variances
+```
+
+```{r}
+effectiveSize(MCMC1[["Sol"]])
+effectiveSize(MCMC1[["VCV"]])
+# effective size above 1000 is recommended
+```
+
+```{r}
+autocorr.diag(MCMC1[["Sol"]])
+autocorr.diag(MCMC1[["VCV"]])
+```
+
+```{r}
+summary(MCMC1)
+```
+
+
+#### Heritability
+
+```{r}
+herit1 <-MCMC1[["VCV"]][ , "animal"] /
+  (MCMC1[["VCV"]][ , "animal"] + MCMC1[["VCV"]][ , "units"])
+```
+
+```{r}
+effectiveSize(herit1)
+mean(herit1) # Simliar to first model with brms
+HPDinterval(herit1) # Compute the 95% credible interval
+plot(herit1)
+```
+
+### Adding random effects
+
+```{r}
+prior2 <- list(R = list(V = 1, nu = 0.002),
+               G = list(G1 = list(V = 1, nu = 0.002),
+                        G2 = list(V = 1, nu = 0.002)))
+
+```
+
+We will add mother as a random effect.
+
+```{r eval=FALSE, include=FALSE}
+MCMC2 <- MCMCglmm(FFD ~ 1, 
+                  random = ~ animal+mother, 
+                  family = "gaussian",
+                  prior = prior2,
+                  pedigree = pedigree,
+                  data = data_animal,
+                  nitt = 1000000,
+                  burnin = 100000,
+                  thin = 10,
+                  verbose=T)
+save(MCMC2, file = "output/models/MCMC2.rda")
+```
+
+```{r}
+load("output/models/MCMC2.rda")
+```
+
+```{r}
+plot(MCMC2[["Sol"]]) # fixed effects variances
+plot(MCMC2[["VCV"]]) # random effects variances
+```
+
+```{r}
+effectiveSize(MCMC2[["Sol"]])
+effectiveSize(MCMC2[["VCV"]])
+# effective size above 1000 is recommended
+```
+
+```{r}
+autocorr.diag(MCMC2[["Sol"]])
+autocorr.diag(MCMC2[["VCV"]])
+```
+
+```{r}
+summary(MCMC2)
+```
+
+#### Heritability
+
+```{r}
+herit2<-MCMC2$VCV[, "animal"] / rowSums(MCMC2$VCV)
+# Calculate heritability including all random effects contained in
+# VCV (rowSums sums on all the different effects)
+```
+
+```{r}
+effectiveSize(herit2)
+mean(herit2) 
+HPDinterval(herit2) # Compute the 95% credible interval
+plot(herit2)
+```
+
+### Adding fixed effects
+
+We will add treatment as a fixed effect.
+
+```{r eval=FALSE, include=FALSE}
+MCMC3 <- MCMCglmm(FFD ~ treat, 
+                  random = ~ animal+mother, 
+                  family = "gaussian",
+                  prior = prior2, # OK prior?
+                  pedigree = pedigree,
+                  data = data_animal,
+                  nitt = 1000000,
+                  burnin = 100000,
+                  thin = 10,
+                  verbose=T)
+save(MCMC3, file = "output/models/MCMC3.rda")
+```
+
+```{r}
+load("output/models/MCMC3.rda")
+```
+
+```{r}
+plot(MCMC3[["Sol"]]) # fixed effects variances
+plot(MCMC3[["VCV"]]) # random effects variances
+```
+
+```{r}
+effectiveSize(MCMC3[["Sol"]])
+effectiveSize(MCMC3[["VCV"]])
+# effective size above 1000 is recommended
+```
+
+```{r}
+autocorr.diag(MCMC3[["Sol"]])
+autocorr.diag(MCMC3[["VCV"]])
+```
+
+```{r}
+summary(MCMC3)
+```
+
+Explaining the effect of treatment means that our residual variance must have decreased a bit:
+
+```{r}
+mean(MCMC2[["VCV"]][ , "units"])
+mean(MCMC3[["VCV"]][ , "units"])
+```
+
+Because of that, if we compute the denominator of the heritability (a.k.a. the total phenotypic variance 𝑉P) as we did before, the heritability would be increased (Wilson 2008), although the additive genetic variance stayed roughly the same:
+
+```{r}
+mean(MCMC2[["VCV"]][ , "animal"])
+mean(MCMC3[["VCV"]][ , "animal"])
+```
+
+#### Heritability
+
+```{r}
+herit3_naive <- MCMC3[["VCV"]][ , "animal"] / rowSums(MCMC3[["VCV"]])
+mean(herit2)
+mean(herit3_naive)
+```
+
+```{r}
+effectiveSize(herit3_naive)
+mean(herit3_naive)
+HPDinterval(herit3_naive) # Compute the 95% credible interval
+plot(herit3_naive)
+```
+
+```{r}
+compute_varpred <- function(beta, design_matrix) {
+  var(as.vector(design_matrix %*% beta))
+}
+```
+
+```{r}
+X <- MCMC3[["X"]]
+vf <- apply(MCMC3[["Sol"]], 1, compute_varpred, design_matrix = X)
+```
+
+```{r}
+vpRE <- rowSums(MCMC2[["VCV"]])
+vpFE <- rowSums(MCMC3[["VCV"]]) + vf
+mean(vpRE)
+mean(vpFE)
+```
+
+```{r}
+herit3 <- MCMC3[["VCV"]][ , "animal"] / vpFE
+mean(herit3)
+```
+
+## MCMCglmm 2
+
+Code from Strader et al. 2022. Might also use code from Griffiths et al. 2021.
+
+
+Create A-inverse relatedness matrices
+
+```{r}
+Ainv <- inverseA(pedigree)$Ainv
+```
+
+Setup prior
+    
+```{r}
+prior3 <- list(R = list(V = diag(2), nu = 2), 
+                G = list(
+                  G1 = list(V = diag(2)*0.02, nu = 3, alpha.mu = rep(0,2),
+                            alpha.V = diag(2)*1000),
+                  G2 = list(V = diag(1), nu = 1, alpha.mu = rep(0, 1), 
+                            alpha.V = diag(1)*1000),
+                  G3 = list(V = diag(1), nu = 1, alpha.mu = rep(0, 1),
+                            alpha.V = diag(1)*1000)))
+```
+
+```{r eval=FALSE, include=FALSE}
+nsample <- 2000
+THIN <- 1000; BURN <- 200000;
+ (NITT <- BURN + nsample*THIN)
+MCMC4 <- MCMCglmm(FFD ~ 0 + treat + temp_mother + temp_father +
+                    treat:temp_mother + treat:temp_father,
+                   random = ~ us(treat):animal + mother + father,
+                  # No block so far
+                   rcov = ~ idh(treat):units, 
+                   ginverse = list(animal = Ainv),
+                   prior = prior3,
+                   data = data_animal,
+                   nitt = 1000000, burnin = BURN, thin = THIN,
+                   verbose=T)
+save(MCMC4, file = "output/models/MCMC4.rda")
+```
+
+```{r}
+load("output/models/MCMC4.rda")
+```
+
+```{r}
+plot(MCMC4[["Sol"]]) # fixed effects variances
+plot(MCMC4[["VCV"]]) # random effects variances
+```
+
+```{r}
+effectiveSize(MCMC4[["Sol"]])
+effectiveSize(MCMC4[["VCV"]])
+# effective size above 1000 is recommended
+```
+
+```{r}
+autocorr.diag(MCMC4[["Sol"]])
+autocorr.diag(MCMC4[["VCV"]])
+```
+
+```{r}
+summary(MCMC4)
+```
+
+#### Heritability
+
+```{r}
+herit4 <-MCMC4$VCV[, "animal"] / rowSums(MCMC4$VCV)
+
+MCMC4[["VCV"]][ , "animal"] / rowSums(MCMC4[["VCV"]])
+```
+
+```{r}
+effectiveSize(herit4)
+mean(herit4) 
+HPDinterval(herit4) # Compute the 95% credible interval
+plot(herit4)
+```
+
+
 
 # Session info
 

@@ -123,7 +123,7 @@ using a greenhouse experiment}
 \makeatother
 \subtitle{Data preparation and first analyses}
 \author{Alicia Valdés}
-\date{02 March, 2023}
+\date{07 mars, 2023}
 
 \begin{document}
 \maketitle
@@ -192,15 +192,15 @@ files}\label{read-data-from-excel-files}}
 \end{Shaded}
 
 \begin{verbatim}
-## # A tibble: 6 x 7
-##    temp treat    total_n_fl   FFD   LFD date50 Comments
-##   <dbl> <fct>         <dbl> <dbl> <dbl>  <dbl> <chr>   
-## 1  11.3 unheated         17   124   143    134 <NA>    
-## 2   9   unheated          0    NA    NA     NA <NA>    
-## 3  23.4 unheated          8   124   140    128 <NA>    
-## 4  20.6 unheated          0    NA    NA     NA <NA>    
-## 5  21.6 unheated         24   122   154    132 <NA>    
-## 6  45.5 unheated         12   124   150    131 <NA>
+## # A tibble: 6 x 8
+##   id_parent  temp treat    total_n_fl   FFD   LFD date50 Comments              
+##       <dbl> <dbl> <fct>         <dbl> <dbl> <dbl>  <dbl> <chr>                 
+## 1        13  12   unheated         13   129   152    139 <NA>                  
+## 2        13  12   heatmat          16   124   131    125 <NA>                  
+## 3        13  12   heatmat           4   126   136    131 <NA>                  
+## 4        14  29.8 unheated          2   133   136    133 Both mother and father
+## 5        14  29.8 heatmat           1   138   138    137 Both mother and father
+## 6        14  29.8 heatmat           2   131   136    131 Both mother and father
 \end{verbatim}
 
 \hypertarget{how-many-different-mothers-and-fathers}{%
@@ -304,27 +304,34 @@ All looking quite normal.
 \subsection{With offspring from
 crosses}\label{with-offspring-from-crosses}}
 
+Including mother, father and crossing as random factors.
+
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{model\_offpsring\_FFD}\OtherTok{\textless{}{-}}\FunctionTok{glmmTMB}\NormalTok{(FFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{(temp\_mother}\SpecialCharTok{+}\NormalTok{temp\_father)}\SpecialCharTok{*}\NormalTok{treat}\SpecialCharTok{+}
-\NormalTok{                               (}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father),data\_exp)}
+\NormalTok{                               (}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother\_father),data\_exp)}
 \NormalTok{model\_offpsring\_LFD}\OtherTok{\textless{}{-}}\FunctionTok{glmmTMB}\NormalTok{(LFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{(temp\_mother}\SpecialCharTok{+}\NormalTok{temp\_father)}\SpecialCharTok{*}\NormalTok{treat}\SpecialCharTok{+}
-\NormalTok{                               (}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father),data\_exp)}
+\NormalTok{                               (}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother\_father),data\_exp)}
 \NormalTok{model\_offpsring\_date50}\OtherTok{\textless{}{-}}\FunctionTok{glmmTMB}\NormalTok{(date50}\SpecialCharTok{\textasciitilde{}}\NormalTok{(temp\_mother}\SpecialCharTok{+}\NormalTok{temp\_father)}\SpecialCharTok{*}\NormalTok{treat}\SpecialCharTok{+}
-\NormalTok{                               (}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father),data\_exp)}
+\NormalTok{                               (}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother\_father),data\_exp)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
 \FunctionTok{kable}\NormalTok{(}\FunctionTok{tidy}\NormalTok{(model\_offpsring\_FFD),}\AttributeTok{digits=}\FunctionTok{c}\NormalTok{(}\DecValTok{3}\NormalTok{,}\DecValTok{3}\NormalTok{,}\DecValTok{2}\NormalTok{,}\DecValTok{3}\NormalTok{))}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{longtable}[]{@{}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0989}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1099}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0989}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.2857}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0989}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1099}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1099}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0879}}@{}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0938}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1042}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1458}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.2708}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0938}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1042}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1042}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0833}}@{}}
 \toprule()
 \begin{minipage}[b]{\linewidth}\raggedright
 effect
@@ -345,17 +352,19 @@ p.value
 \end{minipage} \\
 \midrule()
 \endhead
-fixed & cond & NA & (Intercept) & 119.755 & 2.184 & 54.83 & 0.000 \\
-fixed & cond & NA & temp\_mother & -0.015 & 0.094 & -0.16 & 0.873 \\
+fixed & cond & NA & (Intercept) & 119.805 & 2.176 & 55.07 & 0.000 \\
+fixed & cond & NA & temp\_mother & -0.017 & 0.094 & -0.18 & 0.860 \\
 fixed & cond & NA & temp\_father & 0.029 & 0.050 & 0.57 & 0.569 \\
-fixed & cond & NA & treatunheated & 9.079 & 1.466 & 6.19 & 0.000 \\
-fixed & cond & NA & temp\_mother:treatunheated & 0.008 & 0.059 & 0.13 &
-0.896 \\
-fixed & cond & NA & temp\_father:treatunheated & 0.008 & 0.043 & 0.20 &
-0.842 \\
-ran\_pars & cond & mother & sd\_\_(Intercept) & 3.367 & NA & NA & NA \\
-ran\_pars & cond & father & sd\_\_(Intercept) & 2.033 & NA & NA & NA \\
-ran\_pars & cond & Residual & sd\_\_Observation & 7.006 & NA & NA &
+fixed & cond & NA & treatunheated & 9.019 & 1.450 & 6.22 & 0.000 \\
+fixed & cond & NA & temp\_mother:treatunheated & 0.008 & 0.059 & 0.14 &
+0.885 \\
+fixed & cond & NA & temp\_father:treatunheated & 0.010 & 0.042 & 0.25 &
+0.805 \\
+ran\_pars & cond & mother & sd\_\_(Intercept) & 3.280 & NA & NA & NA \\
+ran\_pars & cond & father & sd\_\_(Intercept) & 1.893 & NA & NA & NA \\
+ran\_pars & cond & mother\_father & sd\_\_(Intercept) & 1.526 & NA & NA
+& NA \\
+ran\_pars & cond & Residual & sd\_\_Observation & 6.912 & NA & NA &
 NA \\
 \bottomrule()
 \end{longtable}
@@ -367,14 +376,14 @@ NA \\
 \end{Shaded}
 
 \begin{longtable}[]{@{}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0989}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1099}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0989}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.2857}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0989}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1099}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1099}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0879}}@{}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0938}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1042}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1458}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.2708}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0938}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1042}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1042}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0833}}@{}}
 \toprule()
 \begin{minipage}[b]{\linewidth}\raggedright
 effect
@@ -395,17 +404,19 @@ p.value
 \end{minipage} \\
 \midrule()
 \endhead
-fixed & cond & NA & (Intercept) & 135.570 & 1.981 & 68.45 & 0.000 \\
-fixed & cond & NA & temp\_mother & 0.075 & 0.084 & 0.88 & 0.377 \\
-fixed & cond & NA & temp\_father & 0.059 & 0.049 & 1.20 & 0.230 \\
-fixed & cond & NA & treatunheated & 9.998 & 1.847 & 5.41 & 0.000 \\
-fixed & cond & NA & temp\_mother:treatunheated & 0.056 & 0.075 & 0.74 &
-0.458 \\
+fixed & cond & NA & (Intercept) & 135.515 & 1.975 & 68.63 & 0.000 \\
+fixed & cond & NA & temp\_mother & 0.076 & 0.085 & 0.90 & 0.368 \\
+fixed & cond & NA & temp\_father & 0.060 & 0.049 & 1.23 & 0.219 \\
+fixed & cond & NA & treatunheated & 10.026 & 1.838 & 5.45 & 0.000 \\
+fixed & cond & NA & temp\_mother:treatunheated & 0.054 & 0.075 & 0.73 &
+0.467 \\
 fixed & cond & NA & temp\_father:treatunheated & -0.012 & 0.054 & -0.22
-& 0.825 \\
-ran\_pars & cond & mother & sd\_\_(Intercept) & 2.604 & NA & NA & NA \\
-ran\_pars & cond & father & sd\_\_(Intercept) & 1.506 & NA & NA & NA \\
-ran\_pars & cond & Residual & sd\_\_Observation & 8.843 & NA & NA &
+& 0.826 \\
+ran\_pars & cond & mother & sd\_\_(Intercept) & 2.536 & NA & NA & NA \\
+ran\_pars & cond & father & sd\_\_(Intercept) & 1.338 & NA & NA & NA \\
+ran\_pars & cond & mother\_father & sd\_\_(Intercept) & 1.285 & NA & NA
+& NA \\
+ran\_pars & cond & Residual & sd\_\_Observation & 8.793 & NA & NA &
 NA \\
 \bottomrule()
 \end{longtable}
@@ -417,14 +428,14 @@ NA \\
 \end{Shaded}
 
 \begin{longtable}[]{@{}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0989}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1099}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0989}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.2857}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0989}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1099}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1099}}
-  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0879}}@{}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0938}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1042}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1458}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.2708}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0938}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1042}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1042}}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0833}}@{}}
 \toprule()
 \begin{minipage}[b]{\linewidth}\raggedright
 effect
@@ -445,23 +456,22 @@ p.value
 \end{minipage} \\
 \midrule()
 \endhead
-fixed & cond & NA & (Intercept) & 123.564 & 1.821 & 67.86 & 0.000 \\
-fixed & cond & NA & temp\_mother & 0.076 & 0.081 & 0.93 & 0.353 \\
-fixed & cond & NA & temp\_father & 0.083 & 0.037 & 2.27 & 0.023 \\
-fixed & cond & NA & treatunheated & 9.853 & 1.237 & 7.96 & 0.000 \\
-fixed & cond & NA & temp\_mother:treatunheated & 0.008 & 0.050 & 0.15 &
-0.877 \\
+fixed & cond & NA & (Intercept) & 123.564 & 1.821 & 67.85 & 0.000 \\
+fixed & cond & NA & temp\_mother & 0.075 & 0.081 & 0.93 & 0.355 \\
+fixed & cond & NA & temp\_father & 0.084 & 0.037 & 2.28 & 0.023 \\
+fixed & cond & NA & treatunheated & 9.850 & 1.232 & 8.00 & 0.000 \\
+fixed & cond & NA & temp\_mother:treatunheated & 0.008 & 0.050 & 0.16 &
+0.874 \\
 fixed & cond & NA & temp\_father:treatunheated & -0.030 & 0.036 & -0.84
 & 0.399 \\
-ran\_pars & cond & mother & sd\_\_(Intercept) & 2.946 & NA & NA & NA \\
-ran\_pars & cond & father & sd\_\_(Intercept) & 1.303 & NA & NA & NA \\
-ran\_pars & cond & Residual & sd\_\_Observation & 5.921 & NA & NA &
+ran\_pars & cond & mother & sd\_\_(Intercept) & 2.926 & NA & NA & NA \\
+ran\_pars & cond & father & sd\_\_(Intercept) & 1.245 & NA & NA & NA \\
+ran\_pars & cond & mother\_father & sd\_\_(Intercept) & 0.795 & NA & NA
+& NA \\
+ran\_pars & cond & Residual & sd\_\_Observation & 5.891 & NA & NA &
 NA \\
 \bottomrule()
 \end{longtable}
-
-Only effects of treatment are significant for FFD and LFD, also
-temp\_father for date 50.
 
 Save models as HTML table
 
@@ -513,19 +523,19 @@ p
 
 (Intercept)
 
-119.755
+119.805
 
-2.184
+2.176
 
-54.828
+55.065
 
 \textless0.001
 
-135.570
+135.515
 
-1.981
+1.975
 
-68.449
+68.626
 
 \textless0.001
 
@@ -533,35 +543,35 @@ p
 
 1.821
 
-67.855
+67.853
 
 \textless0.001
 
 temp mother
 
--0.015
+-0.017
 
 0.094
 
--0.160
+-0.176
 
-0.873
-
-0.075
-
-0.084
-
-0.883
-
-0.377
+0.860
 
 0.076
 
+0.085
+
+0.901
+
+0.368
+
+0.075
+
 0.081
 
-0.929
+0.926
 
-0.353
+0.355
 
 temp father
 
@@ -573,45 +583,45 @@ temp father
 
 0.569
 
-0.059
+0.060
 
 0.049
 
-1.202
+1.229
 
-0.230
+0.219
 
-0.083
+0.084
 
 0.037
 
-2.267
+2.276
 
 0.023
 
 treat {[}unheated{]}
 
-9.079
+9.019
 
-1.466
+1.450
 
-6.193
-
-\textless0.001
-
-9.998
-
-1.847
-
-5.414
+6.222
 
 \textless0.001
 
-9.853
+10.026
 
-1.237
+1.838
 
-7.964
+5.454
+
+\textless0.001
+
+9.850
+
+1.232
+
+7.996
 
 \textless0.001
 
@@ -621,43 +631,43 @@ temp mother × treat{[}unheated{]}
 
 0.059
 
-0.130
+0.144
 
-0.896
+0.885
 
-0.056
+0.054
 
 0.075
 
-0.742
+0.728
 
-0.458
+0.467
 
 0.008
 
 0.050
 
-0.155
+0.159
 
-0.877
+0.874
 
 temp father × treat{[}unheated{]}
 
-0.008
+0.010
 
-0.043
+0.042
 
-0.199
+0.247
 
-0.842
+0.805
 
 -0.012
 
 0.054
 
--0.221
+-0.220
 
-0.825
+0.826
 
 -0.030
 
@@ -671,33 +681,39 @@ Random Effects
 
 σ2
 
-49.08
+47.78
 
-78.21
+77.31
 
-35.06
+34.70
 
 τ00
 
-11.34 mother
+10.76 mother
 
-6.78 mother
+6.43 mother
 
-8.68 mother
+8.56 mother
 
-4.13 father
+3.58 father
 
-2.27 father
+1.79 father
 
-1.70 father
+1.55 father
+
+2.33 mother\_father
+
+1.65 mother\_father
+
+0.63 mother\_father
 
 ICC
 
+0.26
+
+0.11
+
 0.24
-
-0.10
-
-0.23
 
 N
 
@@ -713,6 +729,12 @@ N
 
 24 father
 
+98 mother\_father
+
+98 mother\_father
+
+98 mother\_father
+
 Observations
 
 844
@@ -723,11 +745,14 @@ Observations
 
 Marginal R2 / Conditional R2
 
-0.257 / 0.435
+0.257 / 0.450
 
-0.258 / 0.335
+0.258 / 0.342
 
-0.337 / 0.488
+0.337 / 0.494
+
+Only effects of treatment are significant for FFD and LFD, also
+temp\_father for date 50.
 
 Plot predictions of significant effects
 
@@ -737,7 +762,7 @@ Plot predictions of significant effects
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-11-1.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-12-1.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -745,7 +770,7 @@ Plot predictions of significant effects
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-11-2.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-12-2.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -753,7 +778,7 @@ Plot predictions of significant effects
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-11-3.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-12-3.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -761,7 +786,7 @@ Plot predictions of significant effects
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-11-4.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-12-4.pdf}
 
 Plot predictions of interactions (NS)
 
@@ -771,7 +796,7 @@ Plot predictions of interactions (NS)
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-12-1.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-13-1.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -779,7 +804,7 @@ Plot predictions of interactions (NS)
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-12-2.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-13-2.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -787,7 +812,7 @@ Plot predictions of interactions (NS)
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-12-3.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-13-3.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -795,7 +820,7 @@ Plot predictions of interactions (NS)
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-12-4.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-13-4.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -803,7 +828,7 @@ Plot predictions of interactions (NS)
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-12-5.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-13-5.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -811,7 +836,7 @@ Plot predictions of interactions (NS)
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-12-6.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-13-6.pdf}
 
 \hypertarget{with-parents}{%
 \subsection{With parents}\label{with-parents}}
@@ -821,6 +846,11 @@ Plot predictions of interactions (NS)
 \NormalTok{model\_parents\_FFD}\OtherTok{\textless{}{-}}\FunctionTok{lm}\NormalTok{(FFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{temp}\SpecialCharTok{*}\NormalTok{treat,data\_parents)}
 \NormalTok{model\_parents\_LFD}\OtherTok{\textless{}{-}}\FunctionTok{lm}\NormalTok{(LFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{temp}\SpecialCharTok{*}\NormalTok{treat,data\_parents)}
 \NormalTok{model\_parents\_date50}\OtherTok{\textless{}{-}}\FunctionTok{lm}\NormalTok{(date50}\SpecialCharTok{\textasciitilde{}}\NormalTok{temp}\SpecialCharTok{*}\NormalTok{treat,data\_parents)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
 \FunctionTok{kable}\NormalTok{(}\FunctionTok{tidy}\NormalTok{(model\_parents\_FFD),}\AttributeTok{digits=}\FunctionTok{c}\NormalTok{(}\DecValTok{3}\NormalTok{,}\DecValTok{3}\NormalTok{,}\DecValTok{2}\NormalTok{,}\DecValTok{3}\NormalTok{))}
 \end{Highlighting}
 \end{Shaded}
@@ -830,10 +860,10 @@ Plot predictions of interactions (NS)
 term & estimate & std.error & statistic & p.value \\
 \midrule()
 \endhead
-(Intercept) & 121.254 & 1.73 & 70.122 & 0.000 \\
-temp & 0.035 & 0.08 & 0.451 & 0.653 \\
-treatunheated & 4.691 & 2.36 & 1.987 & 0.048 \\
-temp:treatunheated & 0.062 & 0.10 & 0.592 & 0.554 \\
+(Intercept) & 121.361 & 1.78 & 68.309 & 0.000 \\
+temp & 0.031 & 0.08 & 0.388 & 0.698 \\
+treatunheated & 4.295 & 2.50 & 1.719 & 0.087 \\
+temp:treatunheated & 0.077 & 0.11 & 0.704 & 0.482 \\
 \bottomrule()
 \end{longtable}
 
@@ -848,10 +878,10 @@ temp:treatunheated & 0.062 & 0.10 & 0.592 & 0.554 \\
 term & estimate & std.error & statistic & p.value \\
 \midrule()
 \endhead
-(Intercept) & 133.919 & 1.77 & 75.794 & 0.000 \\
-temp & 0.146 & 0.08 & 1.847 & 0.066 \\
-treatunheated & 5.552 & 2.37 & 2.339 & 0.020 \\
-temp:treatunheated & 0.097 & 0.10 & 0.927 & 0.355 \\
+(Intercept) & 133.919 & 1.78 & 75.383 & 0.000 \\
+temp & 0.146 & 0.08 & 1.837 & 0.068 \\
+treatunheated & 6.150 & 2.48 & 2.477 & 0.014 \\
+temp:treatunheated & 0.075 & 0.11 & 0.693 & 0.489 \\
 \bottomrule()
 \end{longtable}
 
@@ -866,15 +896,12 @@ temp:treatunheated & 0.097 & 0.10 & 0.927 & 0.355 \\
 term & estimate & std.error & statistic & p.value \\
 \midrule()
 \endhead
-(Intercept) & 124.222 & 1.34 & 92.854 & 0.000 \\
-temp & 0.150 & 0.06 & 2.484 & 0.014 \\
-treatunheated & 6.235 & 1.83 & 3.413 & 0.001 \\
-temp:treatunheated & -0.015 & 0.08 & -0.192 & 0.848 \\
+(Intercept) & 124.469 & 1.37 & 90.620 & 0.000 \\
+temp & 0.140 & 0.06 & 2.274 & 0.024 \\
+treatunheated & 6.072 & 1.93 & 3.143 & 0.002 \\
+temp:treatunheated & -0.009 & 0.08 & -0.105 & 0.917 \\
 \bottomrule()
 \end{longtable}
-
-Only effects of treatment are significant for FFD and LFD, also temp for
-date 50 (p=0.066 for temp in the model for LFD).
 
 Save models as HTML table
 
@@ -926,123 +953,127 @@ p
 
 (Intercept)
 
-121.254
+121.361
 
-1.729
+1.777
 
-70.122
+68.309
 
 \textless0.001
 
 133.919
 
-1.767
+1.777
 
-75.794
+75.383
 
 \textless0.001
 
-124.222
+124.469
 
-1.338
+1.374
 
-92.854
+90.620
 
 \textless0.001
 
 temp
 
-0.035
+0.031
 
-0.078
+0.080
 
-0.451
+0.388
 
-0.653
+0.698
 
 0.146
 
 0.079
 
-1.847
+1.837
 
-0.066
+0.068
 
-0.150
-
-0.060
-
-2.484
-
-0.014
-
-treat {[}unheated{]}
-
-4.691
-
-2.361
-
-1.987
-
-0.048
-
-5.552
-
-2.373
-
-2.339
-
-0.020
-
-6.235
-
-1.826
-
-3.413
-
-0.001
-
-temp × treat {[}unheated{]}
+0.140
 
 0.062
 
-0.104
+2.274
 
-0.592
+0.024
 
-0.554
+treat {[}unheated{]}
 
-0.097
+4.295
 
-0.104
+2.499
 
-0.927
+1.719
 
-0.355
+0.087
 
--0.015
+6.150
 
-0.081
+2.483
 
--0.192
+2.477
 
-0.848
+0.014
+
+6.072
+
+1.932
+
+3.143
+
+0.002
+
+temp × treat {[}unheated{]}
+
+0.077
+
+0.109
+
+0.704
+
+0.482
+
+0.075
+
+0.108
+
+0.693
+
+0.489
+
+-0.009
+
+0.084
+
+-0.105
+
+0.917
 
 Observations
 
-191
+186
 
-189
+185
 
-191
+186
 
 R2 / R2 adjusted
 
-0.129 / 0.115
+0.129 / 0.114
 
-0.238 / 0.226
+0.239 / 0.226
 
-0.232 / 0.219
+0.228 / 0.215
+
+Only effect of treatment is significant for LFD (not for FFD, p=0.087,
+signif when using Anova - type II AOV), also temp for date 50 (p=0.068
+for temp in the model for LFD).
 
 Plot predictions of significant effects
 
@@ -1052,7 +1083,7 @@ Plot predictions of significant effects
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-15-1.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-17-1.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1060,7 +1091,7 @@ Plot predictions of significant effects
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-15-2.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-17-2.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1068,7 +1099,7 @@ Plot predictions of significant effects
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-15-3.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-17-3.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1076,7 +1107,7 @@ Plot predictions of significant effects
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-15-4.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-17-4.pdf}
 
 Plot predictions of interactions (NS)
 
@@ -1086,7 +1117,7 @@ Plot predictions of interactions (NS)
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-16-1.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-18-1.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1094,7 +1125,7 @@ Plot predictions of interactions (NS)
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-16-2.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-18-2.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1102,7 +1133,378 @@ Plot predictions of interactions (NS)
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-16-3.pdf}
+\includegraphics{1_data_prep_analyses_files/figure-latex/unnamed-chunk-18-3.pdf}
+
+\hypertarget{heritability}{%
+\subsection{Heritability}\label{heritability}}
+
+Construct models
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{model\_her\_FFD}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(FFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother),data\_exp,}\AttributeTok{REML=}\NormalTok{T)}
+\NormalTok{model\_her\_LFD}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(LFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother),data\_exp,}\AttributeTok{REML=}\NormalTok{T)}
+\NormalTok{model\_her\_date50}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(date50}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother),data\_exp,}\AttributeTok{REML=}\NormalTok{T)}
+\FunctionTok{summary}\NormalTok{(model\_her\_FFD)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Linear mixed model fit by REML ['lmerMod']
+## Formula: FFD ~ (1 | father) + (1 | mother)
+##    Data: data_exp
+## 
+## REML criterion at convergence: 6068.1
+## 
+## Scaled residuals: 
+##     Min      1Q  Median      3Q     Max 
+## -2.6485 -0.6912  0.0054  0.5641  4.2413 
+## 
+## Random effects:
+##  Groups   Name        Variance Std.Dev.
+##  mother   (Intercept) 11.360   3.370   
+##  father   (Intercept)  3.515   1.875   
+##  Residual             72.134   8.493   
+## Number of obs: 844, groups:  mother, 25; father, 24
+## 
+## Fixed effects:
+##             Estimate Std. Error t value
+## (Intercept) 124.8684     0.8353   149.5
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{summary}\NormalTok{(model\_her\_LFD)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Linear mixed model fit by REML ['lmerMod']
+## Formula: LFD ~ (1 | father) + (1 | mother)
+##    Data: data_exp
+## 
+## REML criterion at convergence: 6395.7
+## 
+## Scaled residuals: 
+##      Min       1Q   Median       3Q      Max 
+## -2.69822 -0.77948 -0.06719  0.74271  2.39390 
+## 
+## Random effects:
+##  Groups   Name        Variance Std.Dev.
+##  mother   (Intercept)   6.289   2.508  
+##  father   (Intercept)   2.090   1.446  
+##  Residual             108.817  10.432  
+## Number of obs: 845, groups:  mother, 25; father, 24
+## 
+## Fixed effects:
+##             Estimate Std. Error t value
+## (Intercept) 143.7550     0.6912     208
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{summary}\NormalTok{(model\_her\_date50)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Linear mixed model fit by REML ['lmerMod']
+## Formula: date50 ~ (1 | father) + (1 | mother)
+##    Data: data_exp
+## 
+## REML criterion at convergence: 5885.2
+## 
+## Scaled residuals: 
+##     Min      1Q  Median      3Q     Max 
+## -2.4068 -0.7115  0.0081  0.5983  3.8863 
+## 
+## Random effects:
+##  Groups   Name        Variance Std.Dev.
+##  mother   (Intercept)  8.694   2.949   
+##  father   (Intercept)  1.680   1.296   
+##  Residual             58.046   7.619   
+## Number of obs: 845, groups:  mother, 25; father, 24
+## 
+## Fixed effects:
+##             Estimate Std. Error t value
+## (Intercept) 131.4959     0.7036   186.9
+\end{verbatim}
+
+Likelihood ratio test
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{model\_her\_FFD\_LR}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(FFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother),data\_exp,}\AttributeTok{REML=}\NormalTok{F)}
+\NormalTok{model\_her\_LFD\_LR}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(LFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother),data\_exp,}\AttributeTok{REML=}\NormalTok{F)}
+\NormalTok{model\_her\_date50\_LR}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(date50}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father)}\SpecialCharTok{+}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother),data\_exp,}\AttributeTok{REML=}\NormalTok{F)}
+\CommentTok{\# REML=FALSE because we want to compare models on likelihood  }
+
+\CommentTok{\# model without random (father)}
+\NormalTok{model\_her\_FFD\_LR\_mother}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(FFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother),data\_exp,}\AttributeTok{REML=}\NormalTok{F)}
+\NormalTok{model\_her\_LFD\_LR\_mother}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(LFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother),data\_exp,}\AttributeTok{REML=}\NormalTok{F)}
+\NormalTok{model\_her\_date50\_LR\_mother}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(date50}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{mother),data\_exp,}\AttributeTok{REML=}\NormalTok{F)}
+
+\CommentTok{\# model without random (mother)}
+\NormalTok{model\_her\_FFD\_LR\_father}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(FFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father),data\_exp,}\AttributeTok{REML=}\NormalTok{F)}
+\NormalTok{model\_her\_LFD\_LR\_father}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(LFD}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father),data\_exp,}\AttributeTok{REML=}\NormalTok{F)}
+\NormalTok{model\_her\_date50\_LR\_father}\OtherTok{\textless{}{-}}\FunctionTok{lmer}\NormalTok{(date50}\SpecialCharTok{\textasciitilde{}}\NormalTok{(}\DecValTok{1}\SpecialCharTok{|}\NormalTok{father),data\_exp,}\AttributeTok{REML=}\NormalTok{F)}
+
+\CommentTok{\# Father effect? Yes, in FFD and date50}
+\FunctionTok{anova}\NormalTok{(model\_her\_FFD\_LR\_mother, model\_her\_FFD\_LR)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Data: data_exp
+## Models:
+## model_her_FFD_LR_mother: FFD ~ (1 | mother)
+## model_her_FFD_LR: FFD ~ (1 | father) + (1 | mother)
+##                         npar    AIC    BIC  logLik deviance  Chisq Df
+## model_her_FFD_LR_mother    3 6086.2 6100.4 -3040.1   6080.2          
+## model_her_FFD_LR           4 6077.6 6096.5 -3034.8   6069.6 10.652  1
+##                         Pr(>Chisq)   
+## model_her_FFD_LR_mother              
+## model_her_FFD_LR            0.0011 **
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{anova}\NormalTok{(model\_her\_LFD\_LR\_mother, model\_her\_LFD\_LR)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Data: data_exp
+## Models:
+## model_her_LFD_LR_mother: LFD ~ (1 | mother)
+## model_her_LFD_LR: LFD ~ (1 | father) + (1 | mother)
+##                         npar    AIC    BIC  logLik deviance  Chisq Df
+## model_her_LFD_LR_mother    3 6405.3 6419.5 -3199.7   6399.3          
+## model_her_LFD_LR           4 6404.7 6423.7 -3198.4   6396.7 2.5734  1
+##                         Pr(>Chisq)
+## model_her_LFD_LR_mother           
+## model_her_LFD_LR            0.1087
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{anova}\NormalTok{(model\_her\_date50\_LR\_mother, model\_her\_date50\_LR)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Data: data_exp
+## Models:
+## model_her_date50_LR_mother: date50 ~ (1 | mother)
+## model_her_date50_LR: date50 ~ (1 | father) + (1 | mother)
+##                            npar    AIC    BIC  logLik deviance Chisq Df
+## model_her_date50_LR_mother    3 5897.7 5911.9 -2945.8   5891.7         
+## model_her_date50_LR           4 5894.3 5913.3 -2943.2   5886.3 5.379  1
+##                            Pr(>Chisq)  
+## model_her_date50_LR_mother             
+## model_her_date50_LR           0.02038 *
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# Mother effect? Yes, in FFD, LFD and date50}
+\FunctionTok{anova}\NormalTok{(model\_her\_FFD\_LR\_father, model\_her\_FFD\_LR)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Data: data_exp
+## Models:
+## model_her_FFD_LR_father: FFD ~ (1 | father)
+## model_her_FFD_LR: FFD ~ (1 | father) + (1 | mother)
+##                         npar    AIC    BIC  logLik deviance  Chisq Df
+## model_her_FFD_LR_father    3 6135.7 6149.9 -3064.8   6129.7          
+## model_her_FFD_LR           4 6077.6 6096.5 -3034.8   6069.6 60.128  1
+##                         Pr(>Chisq)    
+## model_her_FFD_LR_father               
+## model_her_FFD_LR          8.89e-15 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{anova}\NormalTok{(model\_her\_LFD\_LR\_father, model\_her\_LFD\_LR)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Data: data_exp
+## Models:
+## model_her_LFD_LR_father: LFD ~ (1 | father)
+## model_her_LFD_LR: LFD ~ (1 | father) + (1 | mother)
+##                         npar    AIC    BIC  logLik deviance  Chisq Df
+## model_her_LFD_LR_father    3 6416.5 6430.7 -3205.2   6410.5          
+## model_her_LFD_LR           4 6404.7 6423.7 -3198.4   6396.7 13.706  1
+##                         Pr(>Chisq)    
+## model_her_LFD_LR_father               
+## model_her_LFD_LR         0.0002138 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{anova}\NormalTok{(model\_her\_date50\_LR\_father, model\_her\_date50\_LR)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Data: data_exp
+## Models:
+## model_her_date50_LR_father: date50 ~ (1 | father)
+## model_her_date50_LR: date50 ~ (1 | father) + (1 | mother)
+##                            npar    AIC    BIC  logLik deviance  Chisq Df
+## model_her_date50_LR_father    3 5944.3 5958.5 -2969.2   5938.3          
+## model_her_date50_LR           4 5894.3 5913.3 -2943.2   5886.3 51.996  1
+##                            Pr(>Chisq)    
+## model_her_date50_LR_father               
+## model_her_date50_LR         5.561e-13 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+\end{verbatim}
+
+Variance components
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# extract variance components}
+\NormalTok{Variance\_FFD }\OtherTok{\textless{}{-}} \FunctionTok{as.data.frame}\NormalTok{(}\FunctionTok{VarCorr}\NormalTok{(model\_her\_FFD))[,}\DecValTok{4}\NormalTok{] }
+\NormalTok{Variance\_LFD }\OtherTok{\textless{}{-}} \FunctionTok{as.data.frame}\NormalTok{(}\FunctionTok{VarCorr}\NormalTok{(model\_her\_LFD))[,}\DecValTok{4}\NormalTok{] }
+\NormalTok{Variance\_date50 }\OtherTok{\textless{}{-}} \FunctionTok{as.data.frame}\NormalTok{(}\FunctionTok{VarCorr}\NormalTok{(model\_her\_date50))[,}\DecValTok{4}\NormalTok{] }
+\CommentTok{\# Intra{-}class correlation}
+\NormalTok{PropVar\_FFD }\OtherTok{\textless{}{-}}\NormalTok{ Variance\_FFD}\SpecialCharTok{/}\FunctionTok{sum}\NormalTok{(Variance\_FFD) }
+\NormalTok{PropVar\_LFD }\OtherTok{\textless{}{-}}\NormalTok{ Variance\_LFD}\SpecialCharTok{/}\FunctionTok{sum}\NormalTok{(Variance\_LFD) }
+\NormalTok{PropVar\_date50 }\OtherTok{\textless{}{-}}\NormalTok{ Variance\_date50}\SpecialCharTok{/}\FunctionTok{sum}\NormalTok{(Variance\_date50) }
+\CommentTok{\# Proportional variance}
+\end{Highlighting}
+\end{Shaded}
+
+Heritability and maternal effects
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# h\^{}2 (paternal effects)}
+\DecValTok{4}\SpecialCharTok{*}\NormalTok{PropVar\_FFD[}\DecValTok{2}\NormalTok{]}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 0.1615978
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\DecValTok{4}\SpecialCharTok{*}\NormalTok{PropVar\_LFD[}\DecValTok{2}\NormalTok{]}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 0.07132973
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\DecValTok{4}\SpecialCharTok{*}\NormalTok{PropVar\_date50[}\DecValTok{2}\NormalTok{]}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 0.09822599
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# Because the additive genetic variance, VA,}
+\CommentTok{\# is expected to be four times the among pollen‐donor variance }
+\CommentTok{\# (Falconer \& Mackay, 1996; Lynch \& Walsh, 1998)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# maternal effects}
+
+\CommentTok{\# Maternal {-} paternal}
+\CommentTok{\# {-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+\CommentTok{\# summed effects}
+
+\NormalTok{(Variance\_FFD[}\DecValTok{1}\NormalTok{]}\SpecialCharTok{{-}}\NormalTok{Variance\_FFD[}\DecValTok{2}\NormalTok{])}\SpecialCharTok{/}\FunctionTok{sum}\NormalTok{(Variance\_FFD)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 0.09016114
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{(Variance\_LFD[}\DecValTok{1}\NormalTok{]}\SpecialCharTok{{-}}\NormalTok{Variance\_LFD[}\DecValTok{2}\NormalTok{])}\SpecialCharTok{/}\FunctionTok{sum}\NormalTok{(Variance\_LFD)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 0.03582914
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{(Variance\_date50[}\DecValTok{1}\NormalTok{]}\SpecialCharTok{{-}}\NormalTok{Variance\_date50[}\DecValTok{2}\NormalTok{])}\SpecialCharTok{/}\FunctionTok{sum}\NormalTok{(Variance\_date50)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 0.1025179
+\end{verbatim}
+
+Additive genetic effects explained 13.1 / 5.3 / 12.7 \% of the variation
+in FFD / LFD / date50 among sibling plants (σ2 pollen donor = 3.5 / 2.1
+/ 1,68, Likelihood ratio test, χ2 = 10.7 / 2.6 / 5.4, p = 0.001 / 0.109
+/ 0,020). Maternal non‐genetic effects explained 4.0 / 1.8 / 2.5 \% of
+the variation in FFD / LFD / date50 among sibling plants (σ2 pollen
+recipient = 11.4 / 6.3 / 8.7, Likelihood ratio test, χ2 = 60.1 / 13.7 /
+52.0, p \textless{} 0.001). The remaining 82.9 / 92.3 / 84.8 \% of the
+variation in FFD / LFD / date50 was attributable to environmental
+(residual) effects. h2? m2?
+
+\hypertarget{mid-parent-value}{%
+\section{Mid-parent value}\label{mid-parent-value}}
+
+Merge data offspring and parents
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{data\_all}\OtherTok{\textless{}{-}}\NormalTok{data\_exp}\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{left\_join}\NormalTok{(data\_parents}\SpecialCharTok{\%\textgreater{}\%}
+              \FunctionTok{mutate}\NormalTok{(}\AttributeTok{id\_parent=}\FunctionTok{as.factor}\NormalTok{(id\_parent))}\SpecialCharTok{\%\textgreater{}\%}
+              \FunctionTok{select}\NormalTok{(id\_parent,treat,FFD,LFD,date50)}\SpecialCharTok{\%\textgreater{}\%}
+              \FunctionTok{rename}\NormalTok{(}\AttributeTok{treat\_parent=}\NormalTok{treat,}\AttributeTok{FFD\_parent=}\NormalTok{FFD,}\AttributeTok{LFD\_parent=}\NormalTok{LFD,}
+                     \AttributeTok{date50\_parent=}\NormalTok{date50),}
+            \FunctionTok{join\_by}\NormalTok{(mother}\SpecialCharTok{==}\NormalTok{id\_parent))}
+\end{Highlighting}
+\end{Shaded}
+
+Does not work so far because each row in x matches several rows in y.
+
+\hypertarget{to-do}{%
+\section{TO DO}\label{to-do}}
+
+Include id of crossing (mother\_father) as random effect? See how to do
+with mother and father (does not change much?) Run models with mean temp
+of mother and father as part of results. Heritability of FT? Regress FT
+of offspring on FT of parents. ``Biparental value'' (mean) or separately
+fathers and mothers. And separately for each treatment. How much of the
+FT of the offspring is explained by the FT of the parents. Check Elsa's
+paper - code available to download - use!
 
 \hypertarget{session-info}{%
 \section{Session info}\label{session-info}}
@@ -1116,58 +1518,54 @@ Plot predictions of interactions (NS)
 \begin{verbatim}
 ## R version 4.2.2 (2022-10-31 ucrt)
 ## Platform: x86_64-w64-mingw32/x64 (64-bit)
-## Running under: Windows 10 x64 (build 22621)
+## Running under: Windows 10 x64 (build 19045)
 ## 
 ## Matrix products: default
 ## 
 ## locale:
-## [1] LC_COLLATE=English_United States.utf8 
-## [2] LC_CTYPE=English_United States.utf8   
-## [3] LC_MONETARY=English_United States.utf8
-## [4] LC_NUMERIC=C                          
-## [5] LC_TIME=English_United States.utf8    
+## [1] LC_COLLATE=Swedish_Sweden.utf8  LC_CTYPE=Swedish_Sweden.utf8   
+## [3] LC_MONETARY=Swedish_Sweden.utf8 LC_NUMERIC=C                   
+## [5] LC_TIME=Swedish_Sweden.utf8    
 ## 
 ## attached base packages:
 ## [1] stats     graphics  grDevices utils     datasets  methods   base     
 ## 
 ## other attached packages:
-##  [1] knitr_1.42          broom.mixed_0.2.9.4 broom_1.0.3        
-##  [4] jtools_2.2.1        sjPlot_2.8.12       car_3.1-1          
-##  [7] carData_3.0-5       glmmTMB_1.1.5       ggeffects_1.2.0    
-## [10] RColorBrewer_1.1-3  readxl_1.4.2        lubridate_1.9.2    
-## [13] forcats_1.0.0       stringr_1.5.0       dplyr_1.1.0        
-## [16] purrr_1.0.1         readr_2.1.4         tidyr_1.3.0        
-## [19] tibble_3.1.8        ggplot2_3.4.1       tidyverse_2.0.0    
+##  [1] lme4_1.1-31         Matrix_1.5-1        knitr_1.42         
+##  [4] broom.mixed_0.2.9.4 broom_1.0.3         jtools_2.2.1       
+##  [7] sjPlot_2.8.12       car_3.1-1           carData_3.0-5      
+## [10] glmmTMB_1.1.5       ggeffects_1.2.0     RColorBrewer_1.1-3 
+## [13] readxl_1.4.2        lubridate_1.9.2     forcats_1.0.0      
+## [16] stringr_1.5.0       dplyr_1.1.0         purrr_1.0.1        
+## [19] readr_2.1.4         tidyr_1.3.0         tibble_3.1.8       
+## [22] ggplot2_3.4.1       tidyverse_2.0.0    
 ## 
 ## loaded via a namespace (and not attached):
-##  [1] nlme_3.1-162        insight_0.19.0      numDeriv_2016.8-1.1
+##  [1] nlme_3.1-160        insight_0.19.0      numDeriv_2016.8-1.1
 ##  [4] tools_4.2.2         TMB_1.9.2           backports_1.4.1    
 ##  [7] utf8_1.2.3          R6_2.5.1            sjlabelled_1.2.0   
 ## [10] colorspace_2.1-0    withr_2.5.0         tidyselect_1.2.0   
 ## [13] emmeans_1.8.4-1     compiler_4.2.2      performance_0.10.2 
-## [16] cli_3.6.0           sandwich_3.0-2      labeling_0.4.2     
-## [19] bayestestR_0.13.0   scales_1.2.1        mvtnorm_1.1-3      
-## [22] digest_0.6.31       minqa_1.2.5         rmarkdown_2.20     
-## [25] pkgconfig_2.0.3     htmltools_0.5.4     parallelly_1.34.0  
-## [28] lme4_1.1-31         highr_0.10          fastmap_1.1.1      
-## [31] rlang_1.0.6         rstudioapi_0.14     farver_2.1.1       
-## [34] generics_0.1.3      zoo_1.8-11          magrittr_2.0.3     
-## [37] parameters_0.20.2   Matrix_1.5-3        Rcpp_1.0.10        
-## [40] munsell_0.5.0       fansi_1.0.4         abind_1.4-5        
-## [43] lifecycle_1.0.3     furrr_0.3.1         stringi_1.7.12     
-## [46] multcomp_1.4-22     yaml_2.3.7          MASS_7.3-58.2      
-## [49] grid_4.2.2          parallel_4.2.2      listenv_0.9.0      
-## [52] sjmisc_2.8.9        crayon_1.5.2        lattice_0.20-45    
-## [55] haven_2.5.2         splines_4.2.2       pander_0.6.5       
-## [58] sjstats_0.18.2      hms_1.1.2           pillar_1.8.1       
-## [61] boot_1.3-28.1       estimability_1.4.1  effectsize_0.8.3   
-## [64] codetools_0.2-19    glue_1.6.2          evaluate_0.20      
-## [67] modelr_0.1.10       vctrs_0.5.2         nloptr_2.0.3       
-## [70] tzdb_0.3.0          cellranger_1.1.0    gtable_0.3.1       
-## [73] future_1.31.0       datawizard_0.6.5    xfun_0.37          
-## [76] xtable_1.8-4        coda_0.19-4         survival_3.5-3     
-## [79] timechange_0.2.0    globals_0.16.2      TH.data_1.1-1      
-## [82] ellipsis_0.3.2
+## [16] cli_3.6.0           labeling_0.4.2      bayestestR_0.13.0  
+## [19] scales_1.2.1        mvtnorm_1.1-3       digest_0.6.31      
+## [22] minqa_1.2.5         rmarkdown_2.20      pkgconfig_2.0.3    
+## [25] htmltools_0.5.4     parallelly_1.34.0   highr_0.10         
+## [28] fastmap_1.1.1       rlang_1.0.6         rstudioapi_0.14    
+## [31] generics_0.1.3      farver_2.1.1        magrittr_2.0.3     
+## [34] parameters_0.20.2   Rcpp_1.0.10         munsell_0.5.0      
+## [37] fansi_1.0.4         abind_1.4-5         lifecycle_1.0.3    
+## [40] furrr_0.3.1         stringi_1.7.12      yaml_2.3.7         
+## [43] MASS_7.3-58.1       grid_4.2.2          parallel_4.2.2     
+## [46] listenv_0.9.0       sjmisc_2.8.9        crayon_1.5.2       
+## [49] lattice_0.20-45     haven_2.5.2         splines_4.2.2      
+## [52] pander_0.6.5        sjstats_0.18.2      hms_1.1.2          
+## [55] pillar_1.8.1        boot_1.3-28         estimability_1.4.1 
+## [58] effectsize_0.8.3    codetools_0.2-18    glue_1.6.2         
+## [61] evaluate_0.20       modelr_0.1.10       vctrs_0.5.2        
+## [64] nloptr_2.0.3        tzdb_0.3.0          cellranger_1.1.0   
+## [67] gtable_0.3.1        future_1.32.0       datawizard_0.6.5   
+## [70] xfun_0.37           xtable_1.8-4        coda_0.19-4        
+## [73] timechange_0.2.0    globals_0.16.2      ellipsis_0.3.2
 \end{verbatim}
 
 \end{document}

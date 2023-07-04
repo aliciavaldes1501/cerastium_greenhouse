@@ -1,0 +1,1528 @@
+---
+title: Genetic differentiation on flowering time in Cerastium fontanum using a greenhouse
+  experiment
+author: "Alicia Valdés"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    df_print: paged
+  pdf_document:
+    toc: yes
+    toc_depth: 4
+  word_document:
+    toc: yes
+    toc_depth: '4'
+subtitle: Data preparation and first analyses
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+options(tibble.width = Inf)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r load packages, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(RColorBrewer)
+library(ggeffects)
+library(glmmTMB)
+library(car)
+library(sjPlot)
+library(jtools)
+library(broom)
+library(broom.mixed)
+library(knitr)
+library(lme4)
+library(gridExtra)
+library(ggthemes)
+library(kableExtra)
+library(ggpubr)
+library(brms)
+library(nadiv)
+library(bayesplot)
+library(matrixStats)
+library(tidybayes)
+library(cowplot)
+```
+
+```{r Define ggplot themes and palettes, include=FALSE}
+my_theme <- function(){
+  theme_base()+theme(plot.background=element_rect(fill="white", colour=NA))+
+  theme(legend.position="none")+theme(text=element_text(family="serif"))+
+  theme(plot.title = element_text(hjust =-0.06))
+}
+my_theme_legend <- function(){
+  theme_base()+theme(plot.background=element_rect(fill="white", colour=NA))+
+  theme(text=element_text(family="serif"))+
+  theme(plot.title = element_text(hjust =-0.06))
+}
+myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
+```
+
+# Data preparation
+
+## Read data from Excel files
+
+```{r}
+data_exp<-read_excel("data/edited/Cerastium_greenhouse_spring_2022_editedAV.xlsx", 
+                       sheet="extracted_data")
+data_exp$treat<-as.factor(data_exp$treat)
+data_exp$mother<-as.factor(data_exp$mother)
+data_exp$father<-as.factor(data_exp$father)
+data_exp$total_n_fl<-as.integer(data_exp$total_n_fl)
+data_exp$date50<-as.numeric(data_exp$date50)
+data_exp$unique_id<-as.factor(data_exp$unique_id)
+data_exp<-data_exp%>%filter(unique_id!="122/144_41") 
+# Remove one case where temperature of the parents is not known
+```
+
+```{r}
+data_selfed<-read_excel("data/edited/Cerastium_greenhouse_spring_2022_editedAV.xlsx", 
+                       sheet="extracted_data_parents")
+data_selfed$treat<-as.factor(data_selfed$treat)
+data_selfed$id_parent<-as.factor(data_selfed$id_parent)
+data_selfed<-data_selfed%>%
+  mutate(unique_id=paste("selfed",row_number(),sep="_"))
+```
+
+```{r}
+data_shoots<-read_excel("data/edited/Cerastium_greenhouse_spring_2022_editedAV.xlsx", 
+                       sheet="extracted_data_shoots")
+data_shoots$unique_id<-as.factor(data_shoots$unique_id)
+# Dates say 2022 and that is not true, but should be OK if we need to
+# calculate differences
+```
+
+```{r}
+blocks_mothers<-read_excel("data/edited/crossing_design.xlsx", 
+                       sheet="blocks_mothers")
+blocks_fathers<-read_excel("data/edited/crossing_design.xlsx", 
+                       sheet="blocks_fathers")
+```
+
+
+```{r}
+head(data_exp)
+head(data_selfed)
+head(data_shoots)
+head(blocks_mothers)
+head(blocks_fathers)
+```
+
+## Unique id is unique in all cases --> Fixed
+
+```{r}
+data_exp%>%group_by(unique_id)%>%summarise(count=n())%>%filter(count>1)
+data_shoots%>%group_by(unique_id)%>%summarise(count=n())%>%filter(count>1)
+```
+
+## How many different mothers and fathers?
+
+```{r}
+length(levels(data_exp$mother)) # 25 different mothers (shouldn't it be 24?)
+length(levels(data_exp$father)) # 24 different mothers
+```
+
+## How many unique combinations of mothers and fathers?
+
+```{r}
+data_exp<-data_exp%>%mutate(mother_father=paste(mother,father,sep="_"))
+```
+
+```{r}
+length(unique(data_exp$mother_father)) # 99 (shouldn't it be 96?)
+```
+
+## Number of plants from each crossing
+
+```{r}
+data_exp%>%group_by(mother_father)%>%summarise(num=n())%>%
+  ggplot(aes(x=num))+geom_histogram(bins=12)
+```
+
+12 plants from most crossings, but also one with 13 and some with fewer.
+
+## Adding shoot info
+
+```{r}
+data_shoots<-data_shoots%>%mutate(day_diff=date2-date1,
+                                  mean_sh_h_date1=(sh1_date1+sh2_date1+sh3_date1)/3,
+                                  mean_sh_h_date2=(sh1_date2+sh2_date2+sh3_date2)/3,
+                                  mean_sh_growth=mean_sh_h_date2-mean_sh_h_date1)
+```
+
+```{r}
+data_exp<-data_exp%>%left_join(data_shoots%>%select(unique_id,mean_sh_growth))
+```
+
+## Adding block info to crossings
+
+```{r}
+data_exp_blocks<-data_exp%>%
+  left_join(blocks_mothers%>%mutate(mother=factor(mother)))%>%
+  left_join(blocks_fathers%>%mutate(father=factor(father)))%>%
+  # Removing 2 cases where block_mother different from block_father
+  filter(block_mother==block_father)%>%
+  mutate(block=factor(block_mother))%>%
+  select(!(block_mother:block_father))
+```
+
+## Add block info to selfed
+
+```{r}
+data_selfed_blocks<-data_selfed%>%
+  mutate(mother=id_parent,father=id_parent)%>%
+  select(-id_parent)%>%
+  left_join(blocks_mothers%>%mutate(mother=factor(mother)))%>%
+  left_join(blocks_fathers%>%mutate(father=factor(father)))%>%
+  mutate(block=factor(ifelse(is.na(block_mother),block_father,block_mother)))%>%
+  select(!(block_mother:block_father))
+```
+
+
+# Distributions
+
+```{r}
+hist(data_exp$FFD)
+hist(data_exp$LFD)
+hist(data_exp$date50)
+data_exp$duration<-data_exp$LFD-data_exp$FFD
+hist(data_exp$duration)
+hist(data_exp$mean_sh_growth)
+```
+
+All looking quite normal.
+
+# Analyses
+
+## LMs / LMMs with selfed progeny
+
+```{r}
+length(levels(data_selfed$id_parent))
+```
+
+Selfed offpsring from 42 maternal families. id_parent is mother and father. Temp is temperature of the "grandmother" of the plant.
+
+```{r}
+data_selfed%>%group_by(id_parent,treat)%>%
+  summarise(mean=mean(FFD),sd=sd(FFD))%>%
+  ggplot(aes(x=treat,y=mean,group=id_parent,color=id_parent,label=id_parent))+
+  geom_line()+geom_label()+ylab("FFD")
+data_selfed%>%group_by(id_parent,treat)%>%
+  summarise(mean=mean(LFD),sd=sd(LFD))%>%
+  ggplot(aes(x=treat,y=mean,group=id_parent,color=id_parent,label=id_parent))+
+  geom_line()+geom_label()+ylab("LFD")
+data_selfed%>%group_by(id_parent,treat)%>%
+  summarise(mean=mean(date50),sd=sd(date50))%>%
+  ggplot(aes(x=treat,y=mean,group=id_parent,color=id_parent,label=id_parent))+
+  geom_line()+geom_label()+ylab("date50")
+```
+
+Differences in RNs between the 42 maternal lines?
+
+2-3 look quite different in the plots above.
+
+```{r}
+model_selfed_FFD_1<-lm(FFD~id_parent*treat,data_selfed)
+model_selfed_LFD_1<-lm(LFD~id_parent*treat,data_selfed)
+model_selfed_date50_1<-lm(date50~id_parent*treat,data_selfed)
+Anova(model_selfed_FFD_1)
+Anova(model_selfed_LFD_1)
+Anova(model_selfed_date50_1)
+```
+
+This suggests that there are no significant differences among individuals in the slope of the RNs. But there are differences in RN elevation.
+
+Differences in RNs depend on origin temperature?
+
+```{r}
+model_selfed_FFD_2<-glmmTMB(FFD~temp*treat+(1|id_parent),data_selfed)
+model_selfed_LFD_2<-glmmTMB(LFD~temp*treat+(1|id_parent),data_selfed)
+model_selfed_date50_2<-glmmTMB(date50~temp*treat+(1|id_parent),data_selfed)
+Anova(model_selfed_FFD_2)
+Anova(model_selfed_LFD_2)
+Anova(model_selfed_date50_2)
+```
+
+For LFD and date 50, differences in elevation related to origin temperature. No differences in slope.
+
+```{r}
+plot(ggpredict(model_selfed_FFD_2,terms=c("temp")))
+plot(ggpredict(model_selfed_LFD_2,terms=c("temp")))
+plot(ggpredict(model_selfed_date50_2,terms=c("temp")))
+```
+
+## LMMs With progeny from crossings
+
+### Flowering phenology
+
+Including mother, father and block as random factors.
+
+```{r}
+model_offpsring_FFD<-glmmTMB(FFD~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father)+(1|block),data_exp_blocks)
+model_offpsring_LFD<-glmmTMB(LFD~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father)+(1|block),data_exp_blocks)
+model_offpsring_date50<-glmmTMB(date50~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father)+(1|block),data_exp_blocks)
+```
+
+Save models as HTML table
+
+```{r}
+tab_model(model_offpsring_FFD,model_offpsring_LFD,model_offpsring_date50,
+          transform=NULL,show.ci=F,show.se=T,show.stat=T,digits=3,
+          dv.labels=c("FFD","LFD","date50"),
+          file="output/tables/Table_models_fl_phen.html",
+          title="Models flowering phenology")
+```
+
+Only effects of treatment are significant for FFD and LFD, also temp_father for date50.
+
+Plot predictions of significant effects
+
+```{r}
+plot(ggpredict(model_offpsring_FFD,terms=c("treat")))
+plot(ggpredict(model_offpsring_LFD,terms=c("treat")))
+plot(ggpredict(model_offpsring_date50,terms=c("treat")))
+plot(ggpredict(model_offpsring_date50,terms=c("temp_father")))
+```
+
+Plot predictions of interactions (NS)
+
+```{r}
+plot(ggpredict(model_offpsring_FFD,terms=c("temp_mother","treat")))
+plot(ggpredict(model_offpsring_LFD,terms=c("temp_mother","treat")))
+plot(ggpredict(model_offpsring_date50,terms=c("temp_mother","treat")))
+plot(ggpredict(model_offpsring_FFD,terms=c("temp_father","treat")))
+plot(ggpredict(model_offpsring_LFD,terms=c("temp_father","treat")))
+plot(ggpredict(model_offpsring_date50,terms=c("temp_father","treat")))
+```
+
+### Vegetative phenology
+
+Including mother, father and block as random factors.
+
+```{r}
+model_offpsring_veg_phen<-glmmTMB(mean_sh_growth~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father)+(1|block),data_exp_blocks)
+```
+
+Save models as HTML table
+
+```{r}
+tab_model(model_offpsring_veg_phen,
+          transform=NULL,show.ci=F,show.se=T,show.stat=T,digits=3,
+          dv.labels=c("Mean shoot growth"),
+          file="output/tables/Table_models_veg_phen.html",
+          title="Models vegetative phenology")
+```
+
+No significant effects.
+
+## Bayesian models
+
+Fitting animal models with brms package
+
+Animal model = a form of a mixed model that can estimate the genetic and environmental components of phenotypic variation using pedigree data. Specifically, we used a linear mixed model (LMM) using Markov chain Monte Carlo (MCMC) in the R package brms. These models are particularly useful for estimating genetic variance in unbalanced pedigrees such as in wild populations or a lack of a fully crossed breeding designs. We can use this model to estimate variance components, narrow-sense heritability (h2) and maternal effects.
+
+### Crosses
+
+Using only offspring from crosses.
+
+Create pedigree:
+
+```{r}
+data_ped_cross<-data.frame(unique(select(data_exp,unique_id,mother,father)))
+```
+
+To be able to fit an animal model, brms needs the relativeness (relationship) matrix of the pedigree and not its inverse (as in other softwares). This can be estimated using the nadiv package.
+
+Create the relativeness (relationship) matrix of the pedigree:
+
+```{r}
+Amat_cross <- as.matrix(makeA(prepPed(data_ped_cross,check=T)))
+```
+
+#### Both treatments, all effects
+
+##### FFD
+
+The random effect is added to the model with the term (1 | gr(animal, cov = Amat)) which associates the id animal to the matrix of relativeness. 
+
+we will use the default priors so far.
+
+Specify model:
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_FFD_full <- brm(
+  FFD~ 1 + (temp_mother+temp_father)*treat + 
+    (1 | gr(unique_id, cov = Amat_cross)) + (1 | block) + 
+    (1|mother), # To account for maternal effects
+  data = data_exp_blocks,
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_offpsring_FFD_full, 
+     file = "output/models/brms_offpsring_FFD_full.rda")
+```
+
+Model diagnostics, examine variance estimate and distributions:
+
+```{r}
+load("output/models/brms_offpsring_FFD_full.rda")
+plot(brms_offpsring_FFD_full)
+summary(brms_offpsring_FFD_full)
+```
+
+Rhat provides information on the estimate convergence. If it’s greater than 1, the chains have not yet converged and it will be required to run more iterations and/or set stronger priors.
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_offpsring_FFD_full))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_offpsring_FFD_full))+my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+Look at fixed effects:
+
+```{r}
+conditional_effects(brms_offpsring_FFD_full)
+```
+
+The posterior distribution of the treat term does not overlap zero. Thus, we can infer that treatment has an effect on FFD.
+
+Calculate heritability and maternal effects:
+
+Not including fixed effects in phenotypic variance
+
+```{r}
+v_animal_offpsring_FFD_full<-(VarCorr(brms_offpsring_FFD_full,
+                                        summary=FALSE)$unique_id$sd)^2
+v_block_offpsring_FFD_full<-(VarCorr(brms_offpsring_FFD_full,
+                                     summary=FALSE)$block$sd)^2
+v_mother_offpsring_FFD_full<-(VarCorr(brms_offpsring_FFD_full,
+                                      summary=FALSE)$mother$sd)^2
+v_r_offpsring_FFD_full<-(VarCorr(brms_offpsring_FFD_full,
+                                   summary=FALSE)$residual$sd)^2
+h1_offpsring_FFD_full<-as.mcmc(v_animal_offpsring_FFD_full/
+                                  (v_animal_offpsring_FFD_full+
+                                     v_block_offpsring_FFD_full+
+                                     v_mother_offpsring_FFD_full+
+                                     v_r_offpsring_FFD_full))
+m1_offpsring_FFD_full<-as.mcmc(v_mother_offpsring_FFD_full/
+                                  (v_animal_offpsring_FFD_full+
+                                     v_block_offpsring_FFD_full+
+                                     v_mother_offpsring_FFD_full+
+                                     v_r_offpsring_FFD_full))
+summary(h1_offpsring_FFD_full)
+summary(m1_offpsring_FFD_full)
+plot(h1_offpsring_FFD_full)
+plot(m1_offpsring_FFD_full)
+```
+
+We could compute the variance arising from the fixed effects as the variance of the predicted values (Nakagawa & Schielzeth 2013; de Villemereuil et al. 2018), and add it to the denominator of heritability. Then the total phenotypic variance would consist of (1) Va, (2) Vf, the variance from fixed effects, (3) Vr, the variance of additional random effects, and (4) Vre, the residual variance component.
+
+However, de Villemereuil et al. (2018) suggests to include only ‘natural’ fixed effects (e.g. sex, and not treatment). So I don't think we should include the variance of the fixed effect of treatment in the denominator here. But we could include the variance related to origin temperature (as this is a "natural" fixed effect).
+
+Including fixed effects (temperatures of origin but not treatment, according to de Villemereuil et al. 2018) in phenotypic variance
+
+```{r}
+v_fixed_offpsring_FFD_full<-rowVars(
+  posterior_linpred(brms_offpsring_FFD_full,
+                    newdata=data_exp_blocks%>%
+                      mutate(treat="unheated"),re_formula = NA))
+# Variance of fixed effects (temp only)
+# Modified newdata because it is the variance of fixed effect
+# assuming individuals only differ in temps_mother and temp_father
+# Idea from code of Dahirel et al. 2021
+# https://github.com/mdahirel/cepaea-personality-2017/blob/main/R/cepaea-2017-script.Rmd
+v_animal_offpsring_FFD_full<-(VarCorr(brms_offpsring_FFD_full,
+                                        summary=FALSE)$unique_id$sd)^2
+v_block_offpsring_FFD_full<-(VarCorr(brms_offpsring_FFD_full,
+                                     summary=FALSE)$block$sd)^2
+v_mother_offpsring_FFD_full<-(VarCorr(brms_offpsring_FFD_full,
+                                      summary=FALSE)$mother$sd)^2
+v_r_offpsring_FFD_full<-(VarCorr(brms_offpsring_FFD_full,
+                                   summary=FALSE)$residual$sd)^2
+h2_offpsring_FFD_full<-as.mcmc(v_animal_offpsring_FFD_full/
+                                  (v_fixed_offpsring_FFD_full+
+                                     v_animal_offpsring_FFD_full+
+                                     v_block_offpsring_FFD_full+
+                                     v_mother_offpsring_FFD_full+
+                                     v_r_offpsring_FFD_full))
+m2_offpsring_FFD_full<-as.mcmc(v_mother_offpsring_FFD_full/
+                                  (v_fixed_offpsring_FFD_full+
+                                     v_animal_offpsring_FFD_full+
+                                     v_block_offpsring_FFD_full+
+                                     v_mother_offpsring_FFD_full+
+                                     v_r_offpsring_FFD_full))
+prop_var_temp_offpsring_FFD_full<-as.mcmc(v_fixed_offpsring_FFD_full/
+                                  (v_fixed_offpsring_FFD_full+
+                                     v_animal_offpsring_FFD_full+
+                                     v_block_offpsring_FFD_full+
+                                     v_mother_offpsring_FFD_full+
+                                     v_r_offpsring_FFD_full))
+summary(h2_offpsring_FFD_full)
+summary(m2_offpsring_FFD_full)
+summary(prop_var_temp_offpsring_FFD_full)
+plot(h2_offpsring_FFD_full)
+plot(m2_offpsring_FFD_full)
+plot(prop_var_temp_offpsring_FFD_full)
+```
+
+Compare the two values of heritability and maternal effects:
+
+```{r}
+mean(h1_offpsring_FFD_full)
+mean(h2_offpsring_FFD_full)
+mean(m1_offpsring_FFD_full)
+mean(m2_offpsring_FFD_full)
+```
+
+Heritabilities and maternal effects are only slightly lower when including fixed effects (= temperatures of origin contribute little to phenotypic variance. I guess this makes sense as there were no significant effects of origin temperatures).
+
+###### Variance components
+
+Ideas from code of Dahirel et al. 2021
+https://github.com/mdahirel/cepaea-personality-2017/blob/main/R/cepaea-2017-script.Rmd
+
+```{r}
+varcomps_offpsring_FFD_full <- tibble(
+  beta0 = posterior_samples(brms_offpsring_FFD_full,pars="b_Intercept")[,1],
+  VF= rowVars(posterior_linpred(brms_offpsring_FFD_full, re_formula = NA)),
+  VFtemp= rowVars(posterior_linpred(brms_offpsring_FFD_full, 
+                                     newdata=data_exp_blocks%>%
+                                       mutate(treat="unheated"), 
+                                     re_formula = NA)),
+  VI = (VarCorr(brms_offpsring_FFD_full,summary=F)$unique_id$sd[,"Intercept"])^2,
+  VM = (VarCorr(brms_offpsring_FFD_full,summary=F)$mother$sd[,"Intercept"])^2,
+  VB= VarCorr(brms_offpsring_FFD_full,summary=FALSE)$block$sd[,"Intercept"]^2,
+  VR=(posterior_samples(brms_offpsring_FFD_full,pars="sigma")[,1])^2
+  ) %>% 
+  mutate(VP = select(.,c(VF,VI,VM,VB,VR)) %>% rowSums()) %>% 
+  mutate(.iteration = 1) %>% mutate(.iteration = cumsum(.iteration))
+```
+
+```{r}
+varcomps_offpsring_FFD_full %>% 
+  pivot_longer(cols=c(VF:VR),names_to = "varcomp" , values_to = "variance") %>% 
+  mutate(varcomp=fct_relevel(varcomp,c("VR","VI","VM","VB","VFtemp","VF"))) %>% 
+  ggplot()+
+  stat_halfeye(aes(y=varcomp,x=100*variance/VP),
+                point_interval = mean_hdi,.width = 0.001,
+                normalize="xy")+
+  scale_x_continuous(name="Variance explained (%)",
+                     lim=c(0,100),breaks=seq(from=0,to=100,by=10))+
+  scale_y_discrete(name="Variance component",
+                   labels=c(expression(italic(V[Residual])),
+                            expression(italic(V[Individual])),
+                            expression(italic(V[Mother])),
+                            expression(italic(V[Block])),
+                            expression(italic(V[Fixed(temp)])),
+                            expression(italic(V[Fixed]))
+                            ))+
+  my_theme()+
+  background_grid(colour.major = "grey95",colour.minor = "grey95")+
+  ggtitle("Partitioning of total phenotypic variation for FFD")+
+  labs(caption = expression(paste("Total phenotypic variance =",italic(V[Fixed]),
+                           " + ", italic(V[Block])," + ", italic(V[Mother]),
+                           " + ", italic(V[Individual]),
+                           " + ", italic(V[Residual])
+                           )))
+```
+
+###### Extract BLUPs
+
+```{r}
+BLUPs_brms_offpsring_FFD_full<-as.data.frame(ranef(
+  brms_offpsring_FFD_full)$unique_id)[1]%>%
+  rownames_to_column()%>%
+  rename(unique_id=rowname,BLUP_intercept=Estimate.Intercept)
+```
+
+```{r}
+ggplot(BLUPs_brms_offpsring_FFD_full, aes(unique_id, BLUP_intercept)) + 
+  geom_point(aes(group = unique_id, colour = unique_id), size = 4, alpha = 0.5) + 
+  ylab("BLUP intercept estimate") +
+  geom_hline(yintercept = 0, lty = 2) + my_theme() +
+  theme(axis.text.x = element_blank())
+```
+
+```{r}
+data_exp_blocks<-data_exp_blocks%>%
+  left_join(BLUPs_brms_offpsring_FFD_full)
+```
+
+```{r}
+model_BLUPs<-lm(BLUP_intercept~temp_mother*temp_father,data_exp_blocks)
+summary(model_BLUPs)
+plot(ggpredict(model_BLUPs,terms=c("temp_father","temp_mother")))
+```
+
+Why interaction?
+
+##### LFD
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_LFD_full <- brm(
+  LFD~ 1 + (temp_mother+temp_father)*treat +
+    (1 | gr(unique_id, cov = Amat_cross)) + (1 | block) +
+    (1|mother), # To account for maternal effects
+  data = data_exp_blocks,
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_offpsring_LFD_full,
+     file = "output/models/brms_offpsring_LFD_full.rda")
+```
+
+```{r}
+load("output/models/brms_offpsring_LFD_full.rda")
+plot(brms_offpsring_LFD_full)
+summary(brms_offpsring_LFD_full)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_offpsring_LFD_full))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_offpsring_LFD_full))+my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+```{r}
+conditional_effects(brms_offpsring_LFD_full)
+```
+
+##### date50
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_date50_full <- brm(
+  date50~ 1 + (temp_mother+temp_father)*treat +
+    (1 | gr(unique_id, cov = Amat_cross)) + (1 | block) +
+    (1|mother), # To account for maternal effects
+  data = data_exp_blocks,
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_offpsring_date50_full,
+     file = "output/models/brms_offpsring_date50_full.rda")
+```
+
+```{r}
+load("output/models/brms_offpsring_date50_full.rda")
+plot(brms_offpsring_date50_full)
+summary(brms_offpsring_date50_full)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_offpsring_date50_full))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_offpsring_date50_full))+my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+```{r}
+conditional_effects(brms_offpsring_date50_full)
+```
+
+###### Variance components
+
+Ideas from code of Dahirel et al. 2021
+https://github.com/mdahirel/cepaea-personality-2017/blob/main/R/cepaea-2017-script.Rmd
+
+```{r}
+varcomps_offpsring_date50_full <- tibble(
+  beta0 = posterior_samples(brms_offpsring_date50_full,pars="b_Intercept")[,1],
+  VF= rowVars(posterior_linpred(brms_offpsring_date50_full, re_formula = NA)),
+  VFtemp= rowVars(posterior_linpred(brms_offpsring_date50_full, 
+                                     newdata=data_exp_blocks%>%
+                                       mutate(treat="unheated"), 
+                                     re_formula = NA)),
+  VI = (VarCorr(brms_offpsring_date50_full,summary=F)$unique_id$sd[,"Intercept"])^2,
+  VM = (VarCorr(brms_offpsring_date50_full,summary=F)$mother$sd[,"Intercept"])^2,
+  VB= VarCorr(brms_offpsring_date50_full,summary=FALSE)$block$sd[,"Intercept"]^2,
+  VR=(posterior_samples(brms_offpsring_date50_full,pars="sigma")[,1])^2
+  ) %>% 
+  mutate(VP = select(.,c(VF,VI,VM,VB,VR)) %>% rowSums()) %>% 
+  mutate(.iteration = 1) %>% mutate(.iteration = cumsum(.iteration))
+```
+
+```{r}
+varcomps_offpsring_date50_full %>% 
+  pivot_longer(cols=c(VF:VR),names_to = "varcomp" , values_to = "variance") %>% 
+  mutate(varcomp=fct_relevel(varcomp,c("VR","VI","VM","VB","VFtemp","VF"))) %>% 
+  ggplot()+
+  stat_halfeye(aes(y=varcomp,x=100*variance/VP),
+                point_interval = mean_hdi,.width = 0.001,
+                normalize="xy")+
+  scale_x_continuous(name="Variance explained (%)",
+                     lim=c(0,100),breaks=seq(from=0,to=100,by=10))+
+  scale_y_discrete(name="Variance component",
+                   labels=c(expression(italic(V[Residual])),
+                            expression(italic(V[Individual])),
+                            expression(italic(V[Mother])),
+                            expression(italic(V[Block])),
+                            expression(italic(V[Fixed(temp)])),
+                            expression(italic(V[Fixed]))
+                            ))+
+  my_theme()+
+  background_grid(colour.major = "grey95",colour.minor = "grey95")+
+  ggtitle("Partitioning of total phenotypic variation for date50")+
+  labs(caption = expression(paste("Total phenotypic variance =",italic(V[Fixed]),
+                           " + ", italic(V[Block])," + ", italic(V[Mother]),
+                           " + ", italic(V[Individual]),
+                           " + ", italic(V[Residual])
+                           )))
+```
+
+#### Both treatments, no origin temperatures
+
+##### FFD
+
+Specify model:
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_FFD_notemp <- brm(
+  FFD~ 1 + treat + 
+    (1 | gr(unique_id, cov = Amat_cross)) + (1 | block) + 
+    (1|mother), # To account for maternal effects
+  data = data_exp_blocks,
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 10000, warmup = 3000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_offpsring_FFD_notemp, 
+     file = "output/models/brms_offpsring_FFD_notemp.rda")
+```
+
+```{r}
+load("output/models/brms_offpsring_FFD_notemp.rda")
+plot(brms_offpsring_FFD_notemp)
+summary(brms_offpsring_FFD_notemp)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_offpsring_FFD_notemp))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_offpsring_FFD_notemp))+
+            my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+Look at fixed effects:
+
+```{r}
+conditional_effects(brms_offpsring_FFD_notemp)
+```
+
+Calculate heritability and maternal effects:
+
+```{r}
+v_animal_offpsring_FFD_notemp<-(VarCorr(brms_offpsring_FFD_notemp,
+                                        summary=FALSE)$unique_id$sd)^2
+v_block_offpsring_FFD_notemp<-(VarCorr(brms_offpsring_FFD_notemp,
+                                     summary=FALSE)$block$sd)^2
+v_mother_offpsring_FFD_notemp<-(VarCorr(brms_offpsring_FFD_notemp,
+                                      summary=FALSE)$mother$sd)^2
+v_r_offpsring_FFD_notemp<-(VarCorr(brms_offpsring_FFD_notemp,
+                                   summary=FALSE)$residual$sd)^2
+h_offpsring_FFD_notemp<-as.mcmc(v_animal_offpsring_FFD_notemp/
+                                  (v_animal_offpsring_FFD_notemp+
+                                     v_block_offpsring_FFD_notemp+
+                                     v_mother_offpsring_FFD_notemp+
+                                     v_r_offpsring_FFD_notemp))
+m_offpsring_FFD_notemp<-as.mcmc(v_mother_offpsring_FFD_notemp/
+                                  (v_animal_offpsring_FFD_notemp+
+                                     v_block_offpsring_FFD_notemp+
+                                     v_mother_offpsring_FFD_notemp+
+                                     v_r_offpsring_FFD_notemp))
+summary(h_offpsring_FFD_notemp)
+summary(m_offpsring_FFD_notemp)
+plot(h_offpsring_FFD_notemp)
+plot(m_offpsring_FFD_notemp)
+```
+
+Heritability values are quite similar to the ones from previous model.
+Including temperature of origin in the model does not matter a lot for calculation of heritability.
+
+##### LFD
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_LFD_notemp <- brm(
+  LFD~ 1 + treat +
+    (1 | gr(unique_id, cov = Amat_cross)) + (1 | block) +
+    (1|mother), # To account for maternal effects
+  data = data_exp_blocks,
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 10000, warmup = 3000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_offpsring_LFD_notemp,
+     file = "output/models/brms_offpsring_LFD_notemp.rda")
+```
+
+```{r}
+load("output/models/brms_offpsring_LFD_notemp.rda")
+plot(brms_offpsring_LFD_notemp)
+summary(brms_offpsring_LFD_notemp)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_offpsring_LFD_notemp))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_offpsring_LFD_notemp))+my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+```{r}
+conditional_effects(brms_offpsring_LFD_notemp)
+```
+
+##### date50
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_date50_notemp <- brm(
+  date50~ 1 + treat +
+    (1 | gr(unique_id, cov = Amat_cross)) + (1 | block) +
+    (1|mother), # To account for maternal effects
+  data = data_exp_blocks,
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 15000, warmup = 6000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_offpsring_date50_notemp,
+     file = "output/models/brms_offpsring_date50_notemp.rda")
+```
+
+```{r}
+load("output/models/brms_offpsring_date50_notemp.rda")
+plot(brms_offpsring_date50_notemp)
+summary(brms_offpsring_date50_notemp)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_offpsring_date50_notemp))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_offpsring_date50_notemp))+
+            my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+```{r}
+conditional_effects(brms_offpsring_date50_notemp)
+```
+
+#### Without treatments, without origin temperatures
+
+##### FFD
+
+Specify model:
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_FFD_notreat_notemp <- brm(
+  FFD~ 1 +  
+    (1 | gr(unique_id, cov = Amat_cross)) + (1 | block) + 
+    (1|mother), # To account for maternal effects
+  data = data_exp_blocks,
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 10000, warmup = 3000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_offpsring_FFD_notreat_notemp, 
+     file = "output/models/brms_offpsring_FFD_notreat_notemp.rda")
+```
+
+```{r}
+load("output/models/brms_offpsring_FFD_notreat_notemp.rda")
+plot(brms_offpsring_FFD_notreat_notemp)
+summary(brms_offpsring_FFD_notreat_notemp)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_offpsring_FFD_notreat_notemp))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_offpsring_FFD_notreat_notemp))+
+            my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+Calculate heritability and maternal effects:
+
+```{r}
+v_animal_offpsring_FFD_notreat_notemp<-(VarCorr(brms_offpsring_FFD_notreat_notemp,
+                                        summary=FALSE)$unique_id$sd)^2
+v_block_offpsring_FFD_notreat_notemp<-(VarCorr(brms_offpsring_FFD_notreat_notemp,
+                                     summary=FALSE)$block$sd)^2
+v_mother_offpsring_FFD_notreat_notemp<-(VarCorr(brms_offpsring_FFD_notreat_notemp,
+                                      summary=FALSE)$mother$sd)^2
+v_r_offpsring_FFD_notreat_notemp<-(VarCorr(brms_offpsring_FFD_notreat_notemp,
+                                   summary=FALSE)$residual$sd)^2
+h_offpsring_FFD_notreat_notemp<-as.mcmc(v_animal_offpsring_FFD_notreat_notemp/
+                                  (v_animal_offpsring_FFD_notreat_notemp+
+                                     v_block_offpsring_FFD_notreat_notemp+
+                                     v_mother_offpsring_FFD_notreat_notemp+
+                                     v_r_offpsring_FFD_notreat_notemp))
+m_offpsring_FFD_notreat_notemp<-as.mcmc(v_mother_offpsring_FFD_notreat_notemp/
+                                  (v_animal_offpsring_FFD_notreat_notemp+
+                                     v_block_offpsring_FFD_notreat_notemp+
+                                     v_mother_offpsring_FFD_notreat_notemp+
+                                     v_r_offpsring_FFD_notreat_notemp))
+summary(h_offpsring_FFD_notreat_notemp)
+summary(m_offpsring_FFD_notreat_notemp)
+plot(h_offpsring_FFD_notreat_notemp)
+plot(m_offpsring_FFD_notreat_notemp)
+```
+
+Heritability decreased compared to values from previous models. 
+This is because including the fixed effect (treatment) decreases the residual variance.
+So in this model without fixed effects, the residual variance is higher, and thus heritability is lower.
+
+##### LFD
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_LFD_notreat_notemp <- brm(
+  LFD~ 1 +
+    (1 | gr(unique_id, cov = Amat_cross)) + (1 | block) +
+    (1|mother), # To account for maternal effects
+  data = data_exp_blocks,
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 10000, warmup = 3000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_offpsring_LFD_notreat_notemp,
+     file = "output/models/brms_offpsring_LFD_notreat_notemp.rda")
+```
+
+```{r}
+load("output/models/brms_offpsring_LFD_notreat_notemp.rda")
+plot(brms_offpsring_LFD_notreat_notemp)
+summary(brms_offpsring_LFD_notreat_notemp)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_offpsring_LFD_notreat_notemp))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_offpsring_LFD_notreat_notemp))+
+            my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+##### date50
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_date50_notreat_notemp <- brm(
+  date50~ 1 +
+    (1 | gr(unique_id, cov = Amat_cross)) + (1 | block) +
+    (1|mother), # To account for maternal effects
+  data = data_exp_blocks,
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 15000, warmup = 6000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_offpsring_date50_notreat_notemp,
+     file = "output/models/brms_offpsring_date50_notreat_notemp.rda")
+```
+
+```{r}
+load("output/models/brms_offpsring_date50_notreat_notemp.rda")
+plot(brms_offpsring_date50_notreat_notemp)
+summary(brms_offpsring_date50_notreat_notemp)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_offpsring_date50_notreat_notemp))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_offpsring_date50_notreat_notemp))+
+            my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+### Crosses + selfed
+
+Using offspring form crosses + selfed progeny.
+
+Create pedigree:
+
+```{r}
+data_ped_all<-rbind(
+  data.frame(unique(select(data_exp,unique_id,mother,father))),
+  data.frame(select(data_selfed,unique_id,id_parent)%>%
+               mutate(mother=id_parent,father=id_parent)%>%
+               select(-id_parent))
+)
+```
+
+Create the relativeness (relationship) matrix of the pedigree:
+
+```{r}
+Amat_all<-as.matrix(makeA(prepPed(data_ped_all,check=T)))
+```
+
+Merge data crossings and selfed:
+
+```{r}
+data_all<-rbind(
+  data_exp_blocks%>%select(unique_id,block,mother,father,
+                           temp_mother,temp_father,treat,FFD,LFD,date50)%>%
+    # Not including mean_sh_growth so far cause not measured in selfed
+    mutate(category=factor("crossed")),
+  data_selfed_blocks%>%mutate(temp_mother=temp,temp_father=temp)%>%
+    select(unique_id,block,mother,father,
+           temp_mother,temp_father,treat,FFD,LFD,date50)%>%
+    mutate(category=factor("selfed"))
+)
+```
+
+#### Both treatments, all effects
+
+##### FFD
+
+The random effect is added to the model with the term (1 | gr(animal, cov = Amat) which associates the id animal to the matrix of relativeness. 
+
+we will use the default priors so far.
+
+Specify model: 
+
+```{r eval=FALSE, include=FALSE}
+brms_all_FFD_full <- brm(
+  FFD~ 1 + (temp_mother+temp_father)*treat + 
+    (1 | gr(unique_id, cov = Amat_all)) + (1 | block) + 
+    (1|mother), # To account for maternal effects
+  data = data_all,
+  data2 = list(Amat_all = Amat_all),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_all_FFD_full, 
+     file = "output/models/brms_all_FFD_full.rda")
+```
+
+Model diagnostics, examine variance estimate and distributions:
+
+```{r}
+load("output/models/brms_all_FFD_full.rda")
+plot(brms_all_FFD_full)
+summary(brms_all_FFD_full)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_all_FFD_full))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_all_FFD_full))+my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+Look at fixed effects:
+
+```{r}
+conditional_effects(brms_all_FFD_full)
+```
+
+The posterior distribution of the treat term does not overlap zero. Thus, we can infer that treatment has an effect on FFD.
+
+Calculate heritability and maternal effects:
+
+Not including fixed effects in phenotypic variance
+
+```{r}
+v_animal_all_FFD_full<-(VarCorr(brms_all_FFD_full,
+                                        summary=FALSE)$unique_id$sd)^2
+v_block_all_FFD_full<-(VarCorr(brms_all_FFD_full,
+                                     summary=FALSE)$block$sd)^2
+v_mother_all_FFD_full<-(VarCorr(brms_all_FFD_full,
+                                      summary=FALSE)$mother$sd)^2
+v_r_all_FFD_full<-(VarCorr(brms_all_FFD_full,
+                                   summary=FALSE)$residual$sd)^2
+h1_all_FFD_full<-as.mcmc(v_animal_all_FFD_full/
+                                  (v_animal_all_FFD_full+
+                                     v_block_all_FFD_full+
+                                     v_mother_all_FFD_full+
+                                     v_r_all_FFD_full))
+m1_all_FFD_full<-as.mcmc(v_mother_all_FFD_full/
+                                  (v_animal_all_FFD_full+
+                                     v_block_all_FFD_full+
+                                     v_mother_all_FFD_full+
+                                     v_r_all_FFD_full))
+summary(h1_all_FFD_full)
+summary(m1_all_FFD_full)
+plot(h1_all_FFD_full)
+plot(m1_all_FFD_full)
+```
+
+Including fixed effects (temperatures of origin but not treatment, according to de Villemereuil et al. 2018) in phenotypic variance
+
+```{r}
+v_fixed_all_FFD_full<-rowVars(
+  posterior_linpred(brms_all_FFD_full,
+                    newdata=data_exp_blocks%>%
+                      mutate(treat="unheated"),re_formula = NA))
+# Variance of fixed effects (temp only)
+# Modified newdata because it is the variance of fixed effect
+# assuming individuals only differ in temps_mother and temp_father
+# Idea from code of Dahirel et al. 2021
+# https://github.com/mdahirel/cepaea-personality-2017/blob/main/R/cepaea-2017-script.Rmd
+v_animal_all_FFD_full<-(VarCorr(brms_all_FFD_full,
+                                        summary=FALSE)$unique_id$sd)^2
+v_block_all_FFD_full<-(VarCorr(brms_all_FFD_full,
+                                     summary=FALSE)$block$sd)^2
+v_mother_all_FFD_full<-(VarCorr(brms_all_FFD_full,
+                                      summary=FALSE)$mother$sd)^2
+v_r_all_FFD_full<-(VarCorr(brms_all_FFD_full,
+                                   summary=FALSE)$residual$sd)^2
+h2_all_FFD_full<-as.mcmc(v_animal_all_FFD_full/
+                                  (v_fixed_all_FFD_full+
+                                     v_animal_all_FFD_full+
+                                     v_block_all_FFD_full+
+                                     v_mother_all_FFD_full+
+                                     v_r_all_FFD_full))
+m2_all_FFD_full<-as.mcmc(v_mother_all_FFD_full/
+                                  (v_fixed_all_FFD_full+
+                                     v_animal_all_FFD_full+
+                                     v_block_all_FFD_full+
+                                     v_mother_all_FFD_full+
+                                     v_r_all_FFD_full))
+summary(h2_all_FFD_full)
+summary(m2_all_FFD_full)
+plot(h2_all_FFD_full)
+plot(m2_all_FFD_full)
+```
+
+##### LFD
+
+##### date50
+
+#### Both treatments, no origin temperatures
+
+##### FFD
+
+Specify model:
+
+```{r eval=FALSE, include=FALSE}
+brms_all_FFD_notemp <- brm(
+  FFD~ 1 + treat + 
+    (1 | gr(unique_id, cov = Amat_all)) + (1 | block) + 
+    (1|mother), # To account for maternal effects
+  data = data_all,
+  data2 = list(Amat_all = Amat_all),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 10000, warmup = 3000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_all_FFD_notemp, 
+     file = "output/models/brms_all_FFD_notemp.rda")
+```
+
+```{r}
+load("output/models/brms_all_FFD_notemp.rda")
+plot(brms_all_FFD_notemp)
+summary(brms_all_FFD_notemp)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_all_FFD_notemp))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_all_FFD_notemp))+
+            my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+Look at fixed effects:
+
+```{r}
+conditional_effects(brms_all_FFD_notemp)
+```
+
+Calculate heritability and maternal effects:
+
+```{r}
+v_animal_all_FFD_notemp<-(VarCorr(brms_all_FFD_notemp,
+                                        summary=FALSE)$unique_id$sd)^2
+v_block_all_FFD_notemp<-(VarCorr(brms_all_FFD_notemp,
+                                     summary=FALSE)$block$sd)^2
+v_mother_all_FFD_notemp<-(VarCorr(brms_all_FFD_notemp,
+                                      summary=FALSE)$mother$sd)^2
+v_r_all_FFD_notemp<-(VarCorr(brms_all_FFD_notemp,
+                                   summary=FALSE)$residual$sd)^2
+h_all_FFD_notemp<-as.mcmc(v_animal_all_FFD_notemp/
+                                  (v_animal_all_FFD_notemp+
+                                     v_block_all_FFD_notemp+
+                                     v_mother_all_FFD_notemp+
+                                     v_r_all_FFD_notemp))
+m_all_FFD_notemp<-as.mcmc(v_mother_all_FFD_notemp/
+                                  (v_animal_all_FFD_notemp+
+                                     v_block_all_FFD_notemp+
+                                     v_mother_all_FFD_notemp+
+                                     v_r_all_FFD_notemp))
+summary(h_all_FFD_notemp)
+summary(m_all_FFD_notemp)
+plot(h_all_FFD_notemp)
+plot(m_all_FFD_notemp)
+```
+
+##### LFD
+
+##### date50
+
+#### Without treatments, without origin temperatures
+
+##### FFD
+
+Specify model:
+
+```{r eval=FALSE, include=FALSE}
+brms_all_FFD_notreat_notemp <- brm(
+  FFD~ 1 +  
+    (1 | gr(unique_id, cov = Amat_all)) + (1 | block) + 
+    (1|mother), # To account for maternal effects
+  data = data_all,
+  data2 = list(Amat_all = Amat_all),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 10000, warmup = 3000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_all_FFD_notreat_notemp, 
+     file = "output/models/brms_all_FFD_notreat_notemp.rda")
+```
+
+```{r}
+load("output/models/brms_all_FFD_notreat_notemp.rda")
+plot(brms_all_FFD_notreat_notemp)
+summary(brms_all_FFD_notreat_notemp)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_all_FFD_notreat_notemp))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_all_FFD_notreat_notemp))+
+            my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+Calculate heritability and maternal effects:
+
+```{r}
+v_animal_all_FFD_notreat_notemp<-(VarCorr(brms_all_FFD_notreat_notemp,
+                                        summary=FALSE)$unique_id$sd)^2
+v_block_all_FFD_notreat_notemp<-(VarCorr(brms_all_FFD_notreat_notemp,
+                                     summary=FALSE)$block$sd)^2
+v_mother_all_FFD_notreat_notemp<-(VarCorr(brms_all_FFD_notreat_notemp,
+                                      summary=FALSE)$mother$sd)^2
+v_r_all_FFD_notreat_notemp<-(VarCorr(brms_all_FFD_notreat_notemp,
+                                   summary=FALSE)$residual$sd)^2
+h_all_FFD_notreat_notemp<-as.mcmc(v_animal_all_FFD_notreat_notemp/
+                                  (v_animal_all_FFD_notreat_notemp+
+                                     v_block_all_FFD_notreat_notemp+
+                                     v_mother_all_FFD_notreat_notemp+
+                                     v_r_all_FFD_notreat_notemp))
+m_all_FFD_notreat_notemp<-as.mcmc(v_mother_all_FFD_notreat_notemp/
+                                  (v_animal_all_FFD_notreat_notemp+
+                                     v_block_all_FFD_notreat_notemp+
+                                     v_mother_all_FFD_notreat_notemp+
+                                     v_r_all_FFD_notreat_notemp))
+summary(h_all_FFD_notreat_notemp)
+summary(m_all_FFD_notreat_notemp)
+plot(h_all_FFD_notreat_notemp)
+plot(m_all_FFD_notreat_notemp)
+```
+
+##### LFD
+
+##### date50
+
+
+### BIVARIATE - not working!
+
+```{r}
+data_wider<-data_exp_blocks%>%
+  select(mother,father,temp_mother,temp_father,treat,FFD,unique_id,block)%>%
+  pivot_wider(names_from="treat",values_from="FFD")
+```
+
+
+```{r eval=FALSE, include=FALSE}
+bf_unheated <- bf(unheated ~ 1 + (1 | a | gr(unique_id, cov = Amat_cross)))
+bf_heatmat <- bf(heatmat ~ 1 + (1 | a | gr(unique_id, cov = Amat_cross)))
+
+brms_biv_offspring_FFD <- brm(
+  bf_unheated + bf_heatmat + set_rescor(TRUE),
+  data = data_wider,
+  data2 = list(Amat_cross = Amat_cross),
+  chains = 2, cores = 2, iter = 1000
+)
+save(brms_biv_offspring_FFD, file = "output/models/brms_biv_offspring_FFD.rda")
+
+# brms_offpsring_FFD_full <- brm(
+#   FFD~ 1 + (temp_mother+temp_father)*treat + 
+#     (1 | gr(unique_id, cov = Amat_cross)) + (1 | block) + 
+#     (1|mother), # To account for maternal effects
+#   data = data_exp_blocks,
+#   data2 = list(Amat_cross = Amat_cross),
+#   family = gaussian(),
+#   chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5,
+#   control = list(adapt_delta = 0.99)
+# )
+
+```
+
+```{r eval=FALSE, include=FALSE}
+brms_biv_offspring_FFD <- brm(
+  bf(mvbind(unheated, heatmat) ~ (1|p|gr(unique_id, cov = Amat_cross)))+
+  set_rescor(FALSE),
+  data = data_wider,
+  data2 = list(Amat_cross = Amat_cross),
+  chains = 2, cores = 2, iter = 1000
+)
+save(brms_biv_offspring_FFD, file = "output/models/brms_biv_offspring_FFD.rda")
+```
+
+### Separate for H and UH: Run more iterations!
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_FFD_full.h <- brm(
+  FFD ~ 1 + (temp_mother+temp_father)+
+    (1 | gr(unique_id, cov = Amat_cross))+ (1 | block) + (1|mother), 
+  data = subset(data_exp_blocks,treat=="heatmat"),
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 2, cores = 1, iter = 1000
+)
+save(brms_offpsring_FFD_full.h, file = "output/models/brms_offpsring_FFD_full.h.rda")
+```
+
+```{r eval=FALSE, include=FALSE}
+brms_offpsring_FFD_full.uh <- brm(
+  FFD ~ 1 + (temp_mother+temp_father)+
+    (1 | gr(unique_id, cov = Amat_cross))+ (1 | block) + (1|mother), 
+  data = subset(data_exp_blocks,treat=="unheated"),
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 2, cores = 1, iter = 1000
+)
+save(brms_offpsring_FFD_full.uh, file = "output/models/brms_offpsring_FFD_full.uh.rda")
+```
+
+```{r}
+load("output/models/brms_offpsring_FFD_full.h.rda")
+load("output/models/brms_offpsring_FFD_full.uh.rda")
+```
+
+Checks, etc.
+
+Heritability, including fixed effects of origin temperature:
+
+```{r}
+v_fixed_offpsring_FFD_full.h<-rowVars(
+  posterior_linpred(brms_offpsring_FFD_full.h,re_formula = NA))
+v_animal_offpsring_FFD_full.h<-(VarCorr(brms_offpsring_FFD_full.h,
+                                        summary=FALSE)$unique_id$sd)^2
+v_block_offpsring_FFD_full.h<-(VarCorr(brms_offpsring_FFD_full.h,
+                                     summary=FALSE)$block$sd)^2
+v_mother_offpsring_FFD_full.h<-(VarCorr(brms_offpsring_FFD_full.h,
+                                      summary=FALSE)$mother$sd)^2
+v_r_offpsring_FFD_full.h<-(VarCorr(brms_offpsring_FFD_full.h,
+                                   summary=FALSE)$residual$sd)^2
+h2_offpsring_FFD_full.h<-as.mcmc(v_animal_offpsring_FFD_full.h/
+                                  (v_fixed_offpsring_FFD_full.h+
+                                     v_animal_offpsring_FFD_full.h+
+                                     v_block_offpsring_FFD_full.h+
+                                     v_mother_offpsring_FFD_full.h+
+                                     v_r_offpsring_FFD_full.h))
+m2_offpsring_FFD_full.h<-as.mcmc(v_mother_offpsring_FFD_full.h/
+                                  (v_fixed_offpsring_FFD_full.h+
+                                     v_animal_offpsring_FFD_full.h+
+                                     v_block_offpsring_FFD_full.h+
+                                     v_mother_offpsring_FFD_full.h+
+                                     v_r_offpsring_FFD_full.h))
+summary(h2_offpsring_FFD_full.h)
+summary(m2_offpsring_FFD_full.h)
+plot(h2_offpsring_FFD_full.h)
+plot(m2_offpsring_FFD_full.h)
+```
+
+```{r}
+v_fixed_offpsring_FFD_full.uh<-rowVars(
+  posterior_linpred(brms_offpsring_FFD_full.uh,re_formula = NA))
+v_animal_offpsring_FFD_full.uh<-(VarCorr(brms_offpsring_FFD_full.uh,
+                                        summary=FALSE)$unique_id$sd)^2
+v_block_offpsring_FFD_full.uh<-(VarCorr(brms_offpsring_FFD_full.uh,
+                                     summary=FALSE)$block$sd)^2
+v_mother_offpsring_FFD_full.uh<-(VarCorr(brms_offpsring_FFD_full.uh,
+                                      summary=FALSE)$mother$sd)^2
+v_r_offpsring_FFD_full.uh<-(VarCorr(brms_offpsring_FFD_full.uh,
+                                   summary=FALSE)$residual$sd)^2
+h2_offpsring_FFD_full.uh<-as.mcmc(v_animal_offpsring_FFD_full.uh/
+                                  (v_fixed_offpsring_FFD_full.uh+
+                                     v_animal_offpsring_FFD_full.uh+
+                                     v_block_offpsring_FFD_full.uh+
+                                     v_mother_offpsring_FFD_full.uh+
+                                     v_r_offpsring_FFD_full.uh))
+m2_offpsring_FFD_full.uh<-as.mcmc(v_mother_offpsring_FFD_full.uh/
+                                  (v_fixed_offpsring_FFD_full.uh+
+                                     v_animal_offpsring_FFD_full.uh+
+                                     v_block_offpsring_FFD_full.uh+
+                                     v_mother_offpsring_FFD_full.uh+
+                                     v_r_offpsring_FFD_full.uh))
+summary(h2_offpsring_FFD_full.uh)
+summary(m2_offpsring_FFD_full.uh)
+plot(h2_offpsring_FFD_full.uh)
+plot(m2_offpsring_FFD_full.uh)
+```
+
+#### Variance components
+
+##### UH treatment
+
+```{r}
+varcomps_offpsring_FFD_full.uh <- tibble(
+  beta0 = posterior_samples(brms_offpsring_FFD_full.uh,pars="b_Intercept")[,1],
+  VF= rowVars(posterior_linpred(brms_offpsring_FFD_full.uh, re_formula = NA)),
+  VI = (VarCorr(brms_offpsring_FFD_full.uh,summary=F)$unique_id$sd[,"Intercept"])^2,
+  VM = (VarCorr(brms_offpsring_FFD_full.uh,summary=F)$mother$sd[,"Intercept"])^2,
+  VB= VarCorr(brms_offpsring_FFD_full.uh,summary=FALSE)$block$sd[,"Intercept"]^2,
+  VR=(posterior_samples(brms_offpsring_FFD_full.uh,pars="sigma")[,1])^2
+  ) %>% 
+  mutate(VP = select(.,c(VF,VI,VM,VB,VR)) %>% rowSums()) %>% 
+  mutate(.iteration = 1) %>% mutate(.iteration = cumsum(.iteration))
+```
+
+```{r}
+varcomps_offpsring_FFD_full.uh %>% 
+  pivot_longer(cols=c(VF:VR),names_to = "varcomp" , values_to = "variance") %>% 
+  mutate(varcomp=fct_relevel(varcomp,c("VR","VI","VM","VB","VF"))) %>% 
+  ggplot()+
+  stat_halfeye(aes(y=varcomp,x=100*variance/VP),
+                point_interval = mean_hdi,.width = 0.001,
+                normalize="xy")+
+  scale_x_continuous(name="Variance explained (%)",
+                     lim=c(0,100),breaks=seq(from=0,to=100,by=10))+
+  scale_y_discrete(name="Variance component",
+                   labels=c(expression(italic(V[Residual])),
+                            expression(italic(V[Individual])),
+                            expression(italic(V[Mother])),
+                            expression(italic(V[Block])),
+                            expression(italic(V[Fixed(temp)])),
+                            expression(italic(V[Fixed]))
+                            ))+
+  my_theme()+
+  background_grid(colour.major = "grey95",colour.minor = "grey95")+
+  ggtitle("Partitioning of total phenotypic variation for FFD (UH treatment)")+
+  labs(caption = expression(paste("Total phenotypic variance =",italic(V[Fixed]),
+                           " + ", italic(V[Block])," + ", italic(V[Mother]),
+                           " + ", italic(V[Individual]),
+                           " + ", italic(V[Residual])
+                           )))
+```
+
+##### H treatment
+
+```{r}
+varcomps_offpsring_FFD_full.h <- tibble(
+  beta0 = posterior_samples(brms_offpsring_FFD_full.h,pars="b_Intercept")[,1],
+  VF= rowVars(posterior_linpred(brms_offpsring_FFD_full.h, re_formula = NA)),
+  VI = (VarCorr(brms_offpsring_FFD_full.h,summary=F)$unique_id$sd[,"Intercept"])^2,
+  VM = (VarCorr(brms_offpsring_FFD_full.h,summary=F)$mother$sd[,"Intercept"])^2,
+  VB= VarCorr(brms_offpsring_FFD_full.h,summary=FALSE)$block$sd[,"Intercept"]^2,
+  VR=(posterior_samples(brms_offpsring_FFD_full.h,pars="sigma")[,1])^2
+  ) %>% 
+  mutate(VP = select(.,c(VF,VI,VM,VB,VR)) %>% rowSums()) %>% 
+  mutate(.iteration = 1) %>% mutate(.iteration = cumsum(.iteration))
+```
+
+```{r}
+varcomps_offpsring_FFD_full.h %>% 
+  pivot_longer(cols=c(VF:VR),names_to = "varcomp" , values_to = "variance") %>% 
+  mutate(varcomp=fct_relevel(varcomp,c("VR","VI","VM","VB","VF"))) %>% 
+  ggplot()+
+  stat_halfeye(aes(y=varcomp,x=100*variance/VP),
+                point_interval = mean_hdi,.width = 0.001,
+                normalize="xy")+
+  scale_x_continuous(name="Variance explained (%)",
+                     lim=c(0,100),breaks=seq(from=0,to=100,by=10))+
+  scale_y_discrete(name="Variance component",
+                   labels=c(expression(italic(V[Residual])),
+                            expression(italic(V[Individual])),
+                            expression(italic(V[Mother])),
+                            expression(italic(V[Block])),
+                            expression(italic(V[Fixed(temp)])),
+                            expression(italic(V[Fixed]))
+                            ))+
+  my_theme()+
+  background_grid(colour.major = "grey95",colour.minor = "grey95")+
+  ggtitle("Partitioning of total phenotypic variation for FFD (H treatment)")+
+  labs(caption = expression(paste("Total phenotypic variance =",italic(V[Fixed]),
+                           " + ", italic(V[Block])," + ", italic(V[Mother]),
+                           " + ", italic(V[Individual]),
+                           " + ", italic(V[Residual])
+                           )))
+```
+
+# Session info
+
+```{r}
+sessionInfo()
+```
