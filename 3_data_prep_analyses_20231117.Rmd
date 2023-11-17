@@ -1,0 +1,1511 @@
+---
+title: Genetic differentiation on flowering time in Cerastium fontanum using a greenhouse
+  experiment
+subtitle: Analyses suggested by Johan
+author: "Alicia Valdés"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    df_print: paged
+  pdf_document:
+    toc: yes
+    toc_depth: 4
+  word_document:
+    toc: yes
+    toc_depth: '4'
+subtitle: Data preparation and first analyses
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+options(tibble.width = Inf)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r load packages, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(RColorBrewer)
+library(ggeffects)
+library(glmmTMB)
+library(car)
+library(sjPlot)
+library(jtools)
+library(broom)
+library(broom.mixed)
+library(knitr)
+library(lme4)
+library(lmerTest)
+library(gridExtra)
+library(ggthemes)
+library(kableExtra)
+library(ggpubr)
+library(brms)
+library(nadiv)
+library(bayesplot)
+library(matrixStats)
+library(tidybayes)
+library(cowplot)
+library(performance)
+library(partR2)
+```
+
+```{r Define ggplot themes and palettes, include=FALSE}
+my_theme <- function(){
+  theme_base()+theme(plot.background=element_rect(fill="white", colour=NA))+
+  theme(legend.position="none")+theme(text=element_text(family="serif"))+
+  theme(plot.title = element_text(hjust =-0.06))
+}
+my_theme_legend <- function(){
+  theme_base()+theme(plot.background=element_rect(fill="white", colour=NA))+
+  theme(text=element_text(family="serif"))+
+  theme(plot.title = element_text(hjust =-0.06))
+}
+myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
+```
+
+# Data preparation
+
+## Read data from Excel files
+
+```{r}
+data_exp<-read_excel("data/edited/Cerastium_greenhouse_spring_2022_editedAV.xlsx", 
+                       sheet="extracted_data")
+data_exp$treat<-as.factor(data_exp$treat)
+data_exp$dam<-as.factor(data_exp$mother)
+data_exp$sire<-as.factor(data_exp$father)
+data_exp$total_n_fl<-as.integer(data_exp$total_n_fl)
+data_exp$date50<-as.numeric(data_exp$date50)
+data_exp$unique_id<-as.factor(data_exp$unique_id)
+data_exp<-data_exp%>%filter(unique_id!="122/144_41") 
+# Remove one case where temperature of the parents is not known
+```
+
+```{r}
+data_selfed<-read_excel("data/edited/Cerastium_greenhouse_spring_2022_editedAV.xlsx", 
+                       sheet="extracted_data_parents")
+data_selfed$treat<-as.factor(data_selfed$treat)
+data_selfed$id_parent<-as.factor(data_selfed$id_parent)
+data_selfed<-data_selfed%>%
+  mutate(unique_id=paste("selfed",row_number(),sep="_"))
+```
+
+```{r}
+data_shoots<-read_excel("data/edited/Cerastium_greenhouse_spring_2022_editedAV.xlsx", 
+                       sheet="extracted_data_shoots")
+data_shoots$unique_id<-as.factor(data_shoots$unique_id)
+# Dates say 2022 and that is not true, but should be OK if we need to
+# calculate differences
+```
+
+```{r}
+blocks_dams<-read_excel("data/edited/crossing_design.xlsx", 
+                       sheet="blocks_mothers")
+blocks_sires<-read_excel("data/edited/crossing_design.xlsx", 
+                       sheet="blocks_fathers")
+```
+
+
+```{r}
+head(data_exp)
+head(data_selfed)
+head(data_shoots)
+head(blocks_dams)
+head(blocks_sires)
+```
+
+## Unique id is unique in all cases --> Fixed
+
+```{r}
+data_exp%>%group_by(unique_id)%>%summarise(count=n())%>%filter(count>1)
+data_shoots%>%group_by(unique_id)%>%summarise(count=n())%>%filter(count>1)
+```
+
+## How many different dams and sires?
+
+```{r}
+length(levels(data_exp$dam)) # 25 different dams (shouldn't it be 24?)
+length(levels(data_exp$sire)) # 24 different dams
+```
+
+## How many unique combinations of dams and sires?
+
+```{r}
+data_exp<-data_exp%>%mutate(dam_sire=paste(dam,sire,sep="_"))
+```
+
+```{r}
+length(unique(data_exp$dam_sire)) # 99 (shouldn't it be 96?)
+```
+
+## Number of plants from each crossing
+
+```{r}
+data_exp%>%group_by(dam_sire)%>%summarise(num=n())%>%
+  ggplot(aes(x=num))+geom_histogram(bins=12)
+```
+
+12 plants from most crossings, but also one with 13 and some with fewer.
+
+## Adding shoot info
+
+```{r}
+data_shoots<-data_shoots%>%
+  mutate(day_diff=date2-date1,
+         mean_sh_h_date1=(sh1_date1+sh2_date1+sh3_date1)/3,
+         mean_sh_h_date2=(sh1_date2+sh2_date2+sh3_date2)/3,
+         mean_sh_growth=mean_sh_h_date2-mean_sh_h_date1)
+```
+
+```{r}
+data_exp<-data_exp%>%left_join(data_shoots%>%select(unique_id,mean_sh_growth))
+```
+
+## Adding block info to crossings
+
+```{r}
+data_exp_blocks<-data_exp%>%
+  left_join(blocks_dams%>%mutate(dam=factor(mother)))%>%
+  left_join(blocks_sires%>%mutate(sire=factor(father)))%>%
+  # Removing 2 cases where block_dam different from block_sire
+  filter(block_mother==block_father)%>%
+  mutate(block=factor(block_mother))%>%
+  select(!(block_mother:block_father))
+```
+
+## Add block info to selfed
+
+```{r}
+data_selfed_blocks<-data_selfed%>%
+  mutate(dam=id_parent,sire=id_parent)%>%
+  select(-id_parent)%>%
+  left_join(blocks_dams%>%mutate(dam=factor(mother)))%>%
+  left_join(blocks_sires%>%mutate(sire=factor(father)))%>%
+  mutate(block=factor(ifelse(is.na(block_mother),block_father,block_mother)))%>%
+  select(!(block_mother:block_father))
+```
+
+# Change date 50 to MFD
+
+```{r}
+data_exp<-data_exp%>%rename(MFD=date50)
+```
+
+# Distributions
+
+```{r}
+hist(data_exp$FFD)
+hist(data_exp$LFD)
+hist(data_exp$MFD)
+data_exp$duration<-data_exp$LFD-data_exp$FFD
+hist(data_exp$duration)
+hist(data_exp$mean_sh_growth)
+```
+
+All looking quite normal.
+
+# Analyses suggested by Johan
+
+## Prediction 1a
+
+### Models
+
+```{r}
+model1a_veg_uh<-lmer(mean_sh_growth~1+(1|sire)+(1|dam)+(1|sire:dam),
+                     subset(data_exp,treat=="unheated"))
+model1a_veg_h<-lmer(mean_sh_growth~1+(1|sire)+(1|dam)+(1|sire:dam),
+                     subset(data_exp,treat=="heatmat"))
+model1a_FFD_uh<-lmer(FFD~1+(1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"))
+model1a_FFD_h<-lmer(FFD~1+(1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"))
+model1a_LFD_uh<-lmer(LFD~1+(1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"))
+model1a_LFD_h<-lmer(LFD~1+(1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"))
+model1a_MFD_uh<-lmer(MFD~1+(1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"))
+model1a_MFD_h<-lmer(MFD~1+(1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"))
+summary(model1a_veg_uh)
+summary(model1a_veg_h)
+summary(model1a_FFD_uh)
+summary(model1a_FFD_h)
+summary(model1a_LFD_uh)
+summary(model1a_LFD_h)
+summary(model1a_MFD_uh)
+summary(model1a_MFD_h)
+```
+
+### Proportions of variance
+
+```{r}
+Variance_veg_uh<-as.data.frame(VarCorr(model1a_veg_uh))[,c(1,4)]
+Variance_FFD_uh<-as.data.frame(VarCorr(model1a_FFD_uh))[,c(1,4)]
+Variance_LFD_uh<-as.data.frame(VarCorr(model1a_LFD_uh))[,c(1,4)]
+Variance_MFD_uh<-as.data.frame(VarCorr(model1a_MFD_uh))[,c(1,4)]
+Variance_veg_h<-as.data.frame(VarCorr(model1a_veg_h))[,c(1,4)]
+Variance_FFD_h<-as.data.frame(VarCorr(model1a_FFD_h))[,c(1,4)]
+Variance_LFD_h<-as.data.frame(VarCorr(model1a_LFD_h))[,c(1,4)]
+Variance_MFD_h<-as.data.frame(VarCorr(model1a_MFD_h))[,c(1,4)]
+# Intra-class correlations
+PropVar_veg_uh <- Variance_veg_uh%>%mutate(propvar=vcov/sum(vcov))%>%
+  mutate(variable="veg",treat="unheated")
+PropVar_FFD_uh <- Variance_FFD_uh%>%mutate(propvar=vcov/sum(vcov))%>%
+  mutate(variable="FFD",treat="unheated")
+PropVar_LFD_uh <- Variance_LFD_uh%>%mutate(propvar=vcov/sum(vcov))%>%
+  mutate(variable="LFD",treat="unheated")
+PropVar_MFD_uh <- Variance_MFD_uh%>%mutate(propvar=vcov/sum(vcov))%>%
+  mutate(variable="MFD",treat="unheated")
+PropVar_veg_h <- Variance_veg_h%>%mutate(propvar=vcov/sum(vcov))%>%
+  mutate(variable="veg",treat="heated")
+PropVar_FFD_h <- Variance_FFD_h%>%mutate(propvar=vcov/sum(vcov))%>%
+  mutate(variable="FFD",treat="heated")
+PropVar_LFD_h <- Variance_LFD_h%>%mutate(propvar=vcov/sum(vcov))%>%
+  mutate(variable="LFD",treat="heated")
+PropVar_MFD_h <- Variance_MFD_h%>%mutate(propvar=vcov/sum(vcov))%>%
+  mutate(variable="MFD",treat="heated")
+Props_var<-rbind(PropVar_veg_uh,PropVar_FFD_uh,PropVar_LFD_uh,PropVar_MFD_uh,
+                 PropVar_veg_h,PropVar_FFD_h,PropVar_LFD_h,PropVar_MFD_h)
+```
+
+```{r}
+ggplot(Props_var,aes(x=variable,y=propvar,fill=grp))+
+  geom_col()+facet_wrap(~treat)
+```
+
+
+### Heritability and maternal effects
+
+```{r}
+# h^2 (paternal effects)
+her_veg_uh<-as.numeric(4*subset(PropVar_veg_uh,grp=="sire")[3])
+her_veg_h<-as.numeric(4*subset(PropVar_veg_h,grp=="sire")[3])
+her_FFD_uh<-as.numeric(4*subset(PropVar_FFD_uh,grp=="sire")[3])
+her_FFD_h<-as.numeric(4*subset(PropVar_FFD_h,grp=="sire")[3])
+her_LFD_uh<-as.numeric(4*subset(PropVar_LFD_uh,grp=="sire")[3])
+her_LFD_h<-as.numeric(4*subset(PropVar_LFD_h,grp=="sire")[3])
+her_MFD_uh<-as.numeric(4*subset(PropVar_MFD_uh,grp=="sire")[3])
+her_MFD_h<-as.numeric(4*subset(PropVar_MFD_h,grp=="sire")[3])
+# Because the additive genetic variance, VA,
+# is expected to be four times the among pollen‐donor variance 
+# (Falconer & Mackay, 1996; Lynch & Walsh, 1998)
+her<-data.frame(value=rbind(her_veg_uh,her_veg_h,her_FFD_uh,her_FFD_h,her_LFD_uh,
+                       her_LFD_h,her_MFD_uh,her_MFD_h))%>%
+  rownames_to_column()%>%
+  mutate(variable=c("veg","veg","FFD","FFD","LFD","LFD","MFD","MFD"),
+         treat=c("unheated","heated","unheated","heated","unheated","heated",
+                 "unheated","heated"),
+         effect="Heritability")
+```
+
+```{r}
+# maternal effects
+
+# Maternal - paternal
+# ----------------------
+# summed effects
+
+# Because the pollen‐recipient variance component contains a combination of
+# genetic and environmental effects, we subtracted the additive genetic 
+# (pollen donor) component from the pollen-recipient variance component
+# before dividing the resulting estimate by VP to estimate 
+# m2 (m2 = (Vpollen recipient − Vpollen donor)/VP).
+
+# But what about the interaction?
+
+mat_veg_uh<-(Variance_veg_uh[2,2]-Variance_veg_uh[3,2])/
+  as.numeric(Variance_veg_uh%>%summarise(sum(vcov)))
+mat_veg_h<-(Variance_veg_h[2,2]-Variance_veg_h[3,2])/
+  as.numeric(Variance_veg_h%>%summarise(sum(vcov)))
+mat_FFD_uh<-(Variance_FFD_uh[2,2]-Variance_FFD_uh[3,2])/
+  as.numeric(Variance_FFD_uh%>%summarise(sum(vcov)))
+mat_FFD_h<-(Variance_FFD_h[2,2]-Variance_FFD_h[3,2])/
+  as.numeric(Variance_FFD_h%>%summarise(sum(vcov)))
+mat_LFD_uh<-(Variance_LFD_uh[2,2]-Variance_LFD_uh[3,2])/
+  as.numeric(Variance_LFD_uh%>%summarise(sum(vcov)))
+mat_LFD_h<-(Variance_LFD_h[2,2]-Variance_LFD_h[3,2])/
+  as.numeric(Variance_LFD_h%>%summarise(sum(vcov)))
+mat_MFD_uh<-(Variance_MFD_uh[2,2]-Variance_MFD_uh[3,2])/
+  as.numeric(Variance_MFD_uh%>%summarise(sum(vcov)))
+mat_MFD_h<-(Variance_MFD_h[2,2]-Variance_MFD_h[3,2])/
+  as.numeric(Variance_MFD_h%>%summarise(sum(vcov)))
+mat<-data.frame(value=rbind(mat_veg_uh,mat_veg_h,mat_FFD_uh,mat_FFD_h,mat_LFD_uh,
+                       mat_LFD_h,mat_MFD_uh,mat_MFD_h))%>%
+  rownames_to_column()%>%
+  mutate(variable=c("veg","veg","FFD","FFD","LFD","LFD","MFD","MFD"),
+         treat=c("unheated","heated","unheated","heated","unheated","heated",
+                 "unheated","heated"),
+         effect="Maternal effects")
+```
+
+```{r}
+her_mat<-rbind(her,mat)
+her_mat
+```
+
+```{r}
+ggplot(her_mat,aes(x=variable,y=value,fill=effect))+
+  geom_bar(stat="identity",position="dodge")+facet_wrap(~treat)
+```
+
+### Table SM: LRTs for variance components
+
+(These results could be used to add asterisks to the previous plot).
+
+```{r}
+ranova(model1a_veg_uh)
+ranova(model1a_veg_h)
+ranova(model1a_FFD_uh)
+ranova(model1a_FFD_h)
+ranova(model1a_LFD_uh)
+ranova(model1a_LFD_h)
+ranova(model1a_MFD_uh)
+ranova(model1a_MFD_h)
+```
+
+## Prediction 1b
+
+### Model
+
+```{r}
+model1b_veg<-lmer(mean_sh_growth~treat+
+                    (1|sire)+(1|dam)+
+                    # We still need sire and dam, right?
+                    (1|treat:sire)+(1|treat:dam)+
+                    (1|sire:dam),
+                  data_exp)
+model1b_FFD<-lmer(FFD~treat+
+                    (1|sire)+(1|dam)+
+                    # We still need sire and dam, right?
+                    (1|treat:sire)+(1|treat:dam)+
+                    (1|sire:dam),
+                  data_exp)
+model1b_LFD<-lmer(LFD~treat+
+                    (1|sire)+(1|dam)+
+                    # We still need sire and dam, right?
+                    (1|treat:sire)+(1|treat:dam)+
+                    (1|sire:dam),
+                  data_exp)
+model1b_MFD<-lmer(MFD~treat+
+                    (1|sire)+(1|dam)+
+                    # We still need sire and dam, right?
+                    (1|treat:sire)+(1|treat:dam)+
+                    (1|sire:dam),
+                  data_exp)
+summary(model1b_veg)
+summary(model1b_FFD)
+summary(model1b_LFD)
+summary(model1b_MFD)
+```
+
+Singular fits: variances for some random effects are zero.
+
+### Proportions of variance
+
+```{r}
+# extract variance components
+Variance_veg_treat <- as.data.frame(VarCorr(model1b_veg))[,c(1,4)]  
+Variance_FFD_treat <- as.data.frame(VarCorr(model1b_FFD))[,c(1,4)]  
+Variance_LFD_treat <- as.data.frame(VarCorr(model1b_LFD))[,c(1,4)]  
+Variance_MFD_treat <- as.data.frame(VarCorr(model1b_MFD))[,c(1,4)]  
+# Intra-class correlation
+PropVar_veg_treat <- Variance_veg_treat%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="veg")
+PropVar_FFD_treat <- Variance_FFD_treat%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="FFD")
+PropVar_LFD_treat <- Variance_LFD_treat%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="LFD")
+PropVar_MFD_treat <- Variance_MFD_treat%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="MFD")
+# Proportional variance
+Props_var_treat<-rbind(PropVar_veg_treat,PropVar_FFD_treat,PropVar_LFD_treat,
+                       PropVar_MFD_treat)
+```
+
+```{r}
+ggplot(Props_var_treat,aes(x=variable,y=propvar,fill=grp))+
+  geom_col()
+```
+
+### Heritability and maternal effects
+
+Are these heritability and maternal effects of the SLOPE of RNs?
+
+```{r}
+# h^2 (paternal effects)
+her_veg_treat<-4*subset(PropVar_veg_treat,grp=="treat:sire")[3]
+her_FFD_treat<-4*subset(PropVar_FFD_treat,grp=="treat:sire")[3]
+her_LFD_treat<-4*subset(PropVar_LFD_treat,grp=="treat:sire")[3]
+her_MFD_treat<-4*subset(PropVar_MFD_treat,grp=="treat:sire")[3]
+# Because the additive genetic variance, VA,
+# is expected to be four times the among pollen‐donor variance 
+# (Falconer & Mackay, 1996; Lynch & Walsh, 1998)
+her_treat<-data.frame(value=rbind(her_veg_treat,her_FFD_treat,
+                                  her_LFD_treat,her_MFD_treat))%>%
+  mutate(variable=c("veg","FFD","LFD","MFD"),
+         effect="Heritability")%>%
+  rename(value=propvar)
+```
+
+```{r}
+# maternal effects
+
+# Maternal - paternal
+# ----------------------
+# summed effects
+
+# Because the pollen‐recipient variance component contains a combination of
+# genetic and environmental effects, we subtracted the additive genetic 
+# (pollen donor) component from the pollen-recipient variance component
+# before dividing the resulting estimate by VP to estimate 
+# m2 (m2 = (Vpollen recipient − Vpollen donor)/VP).
+
+mat_veg_treat<-(subset(Variance_veg_treat,grp=="treat:dam")[2]-
+                  subset(Variance_veg_treat,grp=="treat:sire")[2])/
+  Variance_veg_treat%>%summarise(sum(vcov))
+mat_FFD_treat<-(subset(Variance_FFD_treat,grp=="treat:dam")[2]-
+                  subset(Variance_FFD_treat,grp=="treat:sire")[2])/
+  Variance_FFD_treat%>%summarise(sum(vcov))
+mat_LFD_treat<-(subset(Variance_LFD_treat,grp=="treat:dam")[2]-
+                  subset(Variance_LFD_treat,grp=="treat:sire")[2])/
+  Variance_LFD_treat%>%summarise(sum(vcov))
+mat_MFD_treat<-(subset(Variance_MFD_treat,grp=="treat:dam")[2]-
+                  subset(Variance_MFD_treat,grp=="treat:sire")[2])/
+  Variance_MFD_treat%>%summarise(sum(vcov))
+mat_treat<-data.frame(value=rbind(mat_veg_treat,mat_FFD_treat,
+                                  mat_LFD_treat,mat_MFD_treat))%>%
+  mutate(variable=c("veg","FFD","LFD","MFD"),
+         effect="Maternal effects")%>%
+  rename(value=vcov)
+```
+
+```{r}
+her_mat_treat<-rbind(her_treat,mat_treat)
+her_mat_treat
+```
+
+```{r}
+ggplot(her_mat_treat,aes(x=variable,y=value,fill=effect))+
+  geom_bar(stat="identity",position="dodge")
+```
+
+This is probably not correct! Can we really get negative maternal effects_
+
+### Table SM: LRTs for variance components
+
+(These results could be used to add asterisks to the previous plot).
+
+```{r}
+ranova(model1b_veg)
+ranova(model1b_FFD)
+ranova(model1b_LFD)
+ranova(model1b_MFD)
+```
+
+## Figure 1 (Predictions 1a-1b)
+
+```{r}
+Props_var<-Props_var%>%
+  mutate(variable=factor(variable,levels=c("veg","FFD","MFD","LFD")),
+         treat=factor(treat,levels=c("unheated","heated")),
+         grp=factor(grp,levels=c("sire","dam","sire:dam","Residual")),
+         sig=c("n","y","y","n","n","y","y","n",
+               "n","y","n","n","n","y","y","n",
+               "n","y","n","n","y","y","n","n",
+               "n","y","n","n","n","y","n","n")) # Based on LRTs
+Props_var_treat<-Props_var_treat%>%
+  mutate(variable=factor(variable,levels=c("veg","FFD","MFD","LFD")),
+         grp=factor(grp,levels=c("sire","dam","sire:dam",
+                                 "treat:sire","treat:dam","Residual")),
+         sig=c("y","n","n","y","y","n",
+               "n","n","y","y","n","n",
+               "n","n","n","y","n","n",
+               "n","n","y","y","n","n")) # Based on LRTs
+```
+
+```{r}
+legend_fig1<-get_legend(
+  ggplot(Props_var_treat,aes(x=variable,y=propvar,fill=grp,shape=sig))+
+    geom_col()+
+    geom_point(aes(x=variable,y=propvar,group=grp),
+               position=position_stack(vjust=.5),show.legend=F,size=2)+
+    my_theme_legend()+
+    xlab(NULL)+ylab("Proportion of variance")+
+    theme(legend.position="top",legend.title=element_blank())+
+    scale_fill_discrete(labels=c("sire","dam","sire:dam",
+                                 "treat:sire","treat:dam","residual"),
+                        type=c("#00BFC4","#F8766D","#00BA38","#619CFF",
+                               "#F564E3","#B79F00"))+
+    theme(plot.title = element_text(hjust =-0.15,vjust=-6))+
+    scale_shape_manual(values=c(NA,8))+ggtitle("B)")+
+    theme(axis.text.y=element_blank(),axis.title.y=element_blank()))
+fig1_without_legend<-ggarrange(
+    ggplot(Props_var,aes(x=variable,y=propvar,fill=grp,shape=sig))+
+      geom_col()+
+      geom_point(aes(x=variable,y=propvar,group=grp),
+                 position=position_stack(vjust=.5),show.legend=F,size=2)+
+      facet_wrap(~treat)+
+      my_theme()+xlab(NULL)+ylab("Proportion of variance")+
+      scale_fill_discrete(labels=c("sire","dam","sire:dam","residual"),
+                          type=c("#00BFC4","#F8766D","#00BA38","#B79F00"))+
+      guides(fill=guide_legend(nrow=2))+
+      theme(plot.title = element_text(hjust =-0.05,vjust=0))+
+      scale_shape_manual(values=c(NA,8))+ggtitle("A)"),
+    ggplot(Props_var_treat,aes(x=variable,y=propvar,fill=grp,shape=sig))+
+      geom_col()+
+      geom_point(aes(x=variable,y=propvar,group=grp),
+                 position=position_stack(vjust=.5),show.legend=F,size=2)+
+      my_theme()+
+      xlab(NULL)+ylab("Proportion of variance")+
+      scale_fill_discrete(labels=c("sire","dam","sire:dam",
+                                   "treat:sire","treat:dam","residual"),
+                          type=c("#00BFC4","#F8766D","#00BA38","#619CFF",
+                                 "#F564E3","#B79F00"))+
+      theme(plot.title = element_text(hjust =-0.05,vjust=4.3))+
+      scale_shape_manual(values=c(NA,8))+ggtitle("B)")+
+      theme(axis.text.y=element_blank(),axis.title.y=element_blank()),
+    ncol=2,widths=c(0.65,0.35))
+fig1<-grid.arrange(legend_fig1,fig1_without_legend,ncol=1,
+                   heights=c(0.1,0.9))
+plot(fig1)
+ggsave(file="output/figures/fig1.tiff", plot=fig1,width=10,height=5,dpi=300,
+       compression="lzw")
+```
+
+## Table 1 (Predictions 1a-1b)
+
+```{r}
+her_mat<-her_mat%>%
+  mutate(variable=factor(variable,levels=c("veg","FFD","MFD","LFD")),
+         treat=factor(treat,levels=c("unheated","heated")))%>%
+  select(-rowname)%>%
+  pivot_wider(names_from="effect",values_from="value")
+her_mat
+her_mat_treat<-her_mat_treat%>%
+  pivot_wider(names_from="effect",values_from="value")
+her_mat_treat
+```
+
+## Prediction 2
+
+Main effect of temperature treatment NS for vegetative growth, and significant for FFD, LFD and MFD.
+
+```{r}
+grid.arrange(
+  plot(ggpredict(model1b_veg,terms="treat")),
+  plot(ggpredict(model1b_FFD,terms="treat")),
+  plot(ggpredict(model1b_LFD,terms="treat")),
+  plot(ggpredict(model1b_MFD,terms="treat")),
+  ncol=4)
+```
+
+```{r}
+plot_veg<-grid.arrange(
+    ggplot(data.frame(ggpredict(model1b_veg,
+                                terms=c("treat","sire"),type="random")),
+           aes(x=x,y=predicted,color=group,group=group))+
+      geom_point()+geom_line()+my_theme_legend()+
+      scale_color_discrete(name="sire"),
+    ggplot(data.frame(ggpredict(model1b_veg,
+                                terms=c("treat","dam"),type="random")),
+           aes(x=x,y=predicted,color=group,group=group))+
+      geom_point()+geom_line()+my_theme_legend()+
+      scale_color_discrete(name="dam"),
+    ncol=2,top="Vegetative growth")
+plot_FFD<-grid.arrange(
+    ggplot(data.frame(ggpredict(model1b_FFD,
+                                terms=c("treat","sire"),type="random")),
+           aes(x=x,y=predicted,color=group,group=group))+
+      geom_point()+geom_line()+my_theme_legend()+
+      scale_color_discrete(name="sire (*)"),
+    ggplot(data.frame(ggpredict(model1b_FFD,
+                                terms=c("treat","dam"),type="random")),
+           aes(x=x,y=predicted,color=group,group=group))+
+      geom_point()+geom_line()+my_theme_legend()+
+      scale_color_discrete(name="dam"),
+    ncol=2,top="FFD")
+plot_LFD<-grid.arrange(
+    ggplot(data.frame(ggpredict(model1b_LFD,
+                                terms=c("treat","sire"),type="random")),
+           aes(x=x,y=predicted,color=group,group=group))+ 
+      geom_point()+geom_line()+my_theme_legend()+
+      scale_color_discrete(name="sire"),
+    ggplot(data.frame(ggpredict(model1b_LFD,
+                                terms=c("treat","dam"),type="random")),
+           aes(x=x,y=predicted,color=group,group=group))+
+      geom_point()+geom_line()+my_theme_legend()+
+      scale_color_discrete(name="dam"),
+    ncol=2,top="LFD")
+plot_MFD<-grid.arrange(
+    ggplot(data.frame(ggpredict(model1b_MFD,
+                                terms=c("treat","sire"),type="random")),
+           aes(x=x,y=predicted,color=group,group=group))+
+      geom_point()+geom_line()+my_theme_legend()+    
+      scale_color_discrete(name="sire (*)"),
+    ggplot(data.frame(ggpredict(model1b_MFD,
+                                terms=c("treat","dam"),type="random")),
+           aes(x=x,y=predicted,color=group,group=group))+
+      geom_point()+geom_line()+my_theme_legend()+
+      scale_color_discrete(name="dam"),
+    ncol=2,top="MFD")
+plot(plot_veg)
+plot(plot_FFD)
+plot(plot_LFD)
+plot(plot_MFD)
+```
+
+### Figure 2
+
+```{r}
+data_fig2<-rbind(
+  data.frame(ggpredict(model1b_veg,terms="treat"))%>%mutate(variable="veg"),
+  data.frame(ggpredict(model1b_FFD,terms="treat"))%>%mutate(variable="FFD"),
+  data.frame(ggpredict(model1b_MFD,terms="treat"))%>%mutate(variable="MFD"),
+  data.frame(ggpredict(model1b_LFD,terms="treat"))%>%mutate(variable="LFD"),
+  data.frame(ggpredict(model1b_FFD,terms=c("treat","sire"),type="random"))%>%
+    mutate(variable="FFD"),
+  data.frame(ggpredict(model1b_MFD,terms=c("treat","sire"),type="random"))%>%
+    mutate(variable="MFD"))%>%
+  mutate(variable=factor(variable,levels=c("veg","FFD","MFD","LFD")),
+         x=factor(x,levels=c("unheated","heatmat"),
+                  labels=c("unheated","heated")),
+         type=ifelse(group==1,"mean","individual"))
+```
+
+
+```{r}
+fig2<-ggplot()+
+  geom_point(data=data_fig2%>%filter(group==1)%>%
+               mutate(x=factor(x,levels=c("unheated","heated"))),
+             aes(x=x,y=predicted),size=2)+
+  geom_errorbar(data=data_fig2%>%filter(group==1)%>%
+                  mutate(x=factor(x,levels=c("unheated","heated"))),
+                aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),width=0.05)+
+  geom_line(data=data_fig2%>%filter(group==1)%>%
+              mutate(x=factor(x,levels=c("unheated","heated"))),
+            aes(x=x,y=predicted,group=variable))+
+  geom_line(data=data_fig2%>%filter(group!=1)%>%
+              mutate(x=factor(x,levels=c("unheated","heated"))),
+            aes(x=x,y=predicted,group=group,color=group),linewidth=0.2)+
+  geom_point(data=data_fig2%>%filter(group==1)%>%
+               mutate(x=factor(x,levels=c("unheated","heated"))),
+             aes(x=x,y=predicted),size=3)+
+  geom_errorbar(data=data_fig2%>%filter(group==1)%>%
+                  mutate(x=factor(x,levels=c("unheated","heated"))),
+                aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
+                width=0.05)+
+  geom_line(data=data_fig2%>%filter(group==1)%>%
+              mutate(x=factor(x,levels=c("unheated","heated"))),
+            aes(x=x,y=predicted,group=variable))+
+  facet_wrap(~variable,ncol=4,scales="free")+my_theme()+
+  xlab(NULL)+ylab("Value")+scale_x_discrete(expand=c(0.1,0.1))
+fig2
+ggsave(file="output/figures/fig2.tiff", plot=fig2,width=12,height=3,dpi=300,
+       compression="lzw")
+```
+
+## Prediction 3
+
+### Models
+
+```{r}
+data_exp<-data_exp%>%
+  rename(temp_sire=temp_father,temp_dam=temp_mother)
+```
+
+```{r}
+model3_veg_uh<-lmer(mean_sh_growth~temp_sire+temp_dam+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"&!is.na(mean_sh_growth)))
+model3_veg_h<-lmer(mean_sh_growth~temp_sire+temp_dam+
+                     (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"&!is.na(mean_sh_growth)))
+model3_FFD_uh<-lmer(FFD~temp_sire+temp_dam+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"&!is.na(FFD)))
+model3_FFD_h<-lmer(FFD~temp_sire+temp_dam+
+                     (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"&!is.na(FFD)))
+model3_LFD_uh<-lmer(LFD~temp_sire+temp_dam+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"&!is.na(LFD)))
+model3_LFD_h<-lmer(LFD~temp_sire+temp_dam+
+                     (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"&!is.na(LFD)))
+model3_MFD_uh<-lmer(MFD~temp_sire+temp_dam+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"&!is.na(MFD)))
+model3_MFD_h<-lmer(MFD~temp_sire+temp_dam+
+                     (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"&!is.na(MFD)))
+summary(model3_veg_uh)
+summary(model3_veg_h)
+summary(model3_FFD_uh)
+summary(model3_FFD_h)
+summary(model3_LFD_uh)
+summary(model3_LFD_h)
+summary(model3_MFD_uh)
+summary(model3_MFD_h)
+```
+
+```{r}
+plot(ggpredict(model3_MFD_h,terms=c("temp_sire")))
+```
+
+The only significant effect is that of temp_sire on MFD for the heated treatment: the sign of temp_sire goes in the expected direction (later MFD at a given temperature in individuals with sires from warmer soils). 
+
+#### Table 2
+
+```{r}
+tab_model(model3_veg_uh,model3_FFD_uh,model3_MFD_uh,model3_LFD_uh,
+          transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
+          show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
+          dv.labels=c("Vegetative growth","FFD","MFD","LFD"),
+          file="output/tables/Table2_uh.html")
+tab_model(model3_veg_h,model3_FFD_h,model3_MFD_h,model3_LFD_h,
+          transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
+          show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
+          dv.labels=c("Vegetative growth","FFD","MFD","LFD"),
+          file="output/tables/Table2_h.html")
+```
+
+### Proportions of variance
+
+Proportion of variance explained by temperature of origin of sires and dams = proportion of variance explained by fixed effects: marginal R2.
+
+```{r}
+PropVar_veg_uh_temp<-as.numeric(r2_nakagawa(model3_veg_uh,
+                                            tolerance=1e-324)$R2_marginal)
+PropVar_veg_h_temp<-as.numeric(r2_nakagawa(model3_veg_h)$R2_marginal)
+PropVar_FFD_uh_temp<-as.numeric(r2_nakagawa(model3_FFD_uh)$R2_marginal)
+PropVar_FFD_h_temp<-as.numeric(r2_nakagawa(model3_FFD_h)$R2_marginal)
+PropVar_LFD_uh_temp<-as.numeric(r2_nakagawa(model3_LFD_uh)$R2_marginal)
+PropVar_LFD_h_temp<-as.numeric(r2_nakagawa(model3_LFD_h)$R2_marginal)
+PropVar_MFD_uh_temp<-as.numeric(r2_nakagawa(model3_MFD_uh)$R2_marginal)
+PropVar_MFD_h_temp<-as.numeric(r2_nakagawa(model3_MFD_h,
+                                            tolerance=1e-324)$R2_marginal)
+Props_var_temp<-data.frame(
+  values=c(PropVar_veg_uh_temp,PropVar_veg_h_temp,
+           PropVar_FFD_uh_temp,PropVar_FFD_h_temp,
+           PropVar_LFD_uh_temp,PropVar_LFD_h_temp,
+           PropVar_MFD_uh_temp,PropVar_MFD_h_temp),
+  variable=c("veg","veg","FFD","FFD","LFD","LFD","MFD","MFD"),
+  treat=c("unheated","heated","unheated","heated","unheated","heated",
+                 "unheated","heated"))
+```
+
+```{r}
+ggplot(Props_var_temp,aes(x=variable,y=values,fill=treat))+
+  geom_bar(stat="identity",position="dodge")
+```
+
+Fixed singular fit problems (because of some variance components equalling zero) by increasing tolerance: can we trust these proportions of variance (for MFD, heated, and veg, unheated)?
+
+##### Temperature dam and sire: partR2
+
+```{r eval=FALSE, include=FALSE}
+partR2_model3_veg_uh<-partR2(model3_veg_uh,
+                             partvars=c("temp_sire","temp_dam"),
+                             R2_type="marginal",nboot=1000)
+partR2_model3_veg_h<-partR2(model3_veg_h,
+                             partvars=c("temp_sire","temp_dam"),
+                             R2_type="marginal",nboot=1000)
+partR2_model3_FFD_uh<-partR2(model3_FFD_uh,
+                             partvars=c("temp_sire","temp_dam"),
+                             R2_type="marginal",nboot=1000)
+partR2_model3_FFD_h<-partR2(model3_FFD_h,
+                             partvars=c("temp_sire","temp_dam"),
+                             R2_type="marginal",nboot=1000)
+partR2_model3_LFD_uh<-partR2(model3_LFD_uh,
+                             partvars=c("temp_sire","temp_dam"),
+                             R2_type="marginal",nboot=1000)
+partR2_model3_LFD_h<-partR2(model3_LFD_h,
+                             partvars=c("temp_sire","temp_dam"),
+                             R2_type="marginal",nboot=1000)
+partR2_model3_MFD_uh<-partR2(model3_MFD_uh,
+                             partvars=c("temp_sire","temp_dam"),
+                             R2_type="marginal",nboot=1000)
+partR2_model3_MFD_h<-partR2(model3_MFD_h,
+                             partvars=c("temp_sire","temp_dam"),
+                             R2_type="marginal",nboot=1000)
+save(partR2_model3_veg_uh, file = "output/models/partR2_model3_veg_uh.rda")
+save(partR2_model3_veg_h, file = "output/models/partR2_model3_veg_h.rda")
+save(partR2_model3_FFD_uh, file = "output/models/partR2_model3_FFD_uh.rda")
+save(partR2_model3_FFD_h, file = "output/models/partR2_model3_FFD_h.rda")
+save(partR2_model3_LFD_uh, file = "output/models/partR2_model3_LFD_uh.rda")
+save(partR2_model3_LFD_h, file = "output/models/partR2_model3_LFD_h.rda")
+save(partR2_model3_MFD_uh, file = "output/models/partR2_model3_MFD_uh.rda")
+save(partR2_model3_MFD_h, file = "output/models/partR2_model3_MFD_h.rda")
+```
+
+```{r}
+load("output/models/partR2_model3_veg_uh.rda")
+load("output/models/partR2_model3_veg_h.rda")
+load("output/models/partR2_model3_FFD_uh.rda")
+load("output/models/partR2_model3_FFD_h.rda")
+load( "output/models/partR2_model3_LFD_uh.rda")
+load("output/models/partR2_model3_LFD_h.rda")
+load("output/models/partR2_model3_MFD_uh.rda")
+load("output/models/partR2_model3_MFD_h.rda")
+```
+
+```{r}
+Props_var_temp_mf<-
+  rbind(
+    partR2_model3_veg_uh$R2%>%mutate(variable="veg",treat="unheated"),
+    partR2_model3_veg_h$R2%>%mutate(variable="veg",treat="heated"),
+    partR2_model3_FFD_uh$R2%>%mutate(variable="FFD",treat="unheated"),
+    partR2_model3_FFD_h$R2%>%mutate(variable="FFD",treat="heated"),
+    partR2_model3_LFD_uh$R2%>%mutate(variable="LFD",treat="unheated"),
+    partR2_model3_LFD_h$R2%>%mutate(variable="LFD",treat="heated"),
+    partR2_model3_MFD_uh$R2%>%mutate(variable="MFD",treat="unheated"),
+    partR2_model3_MFD_h$R2%>%mutate(variable="MFD",treat="heated")
+    )
+```
+
+```{r}
+ggplot(Props_var_temp_mf%>%
+         filter(term!="temp_father+temp_mother"&term!="Full")%>%
+         mutate(term=factor(term,levels=c("temp_father","temp_mother"),
+                            labels=c("Temperature sire","Temperature dam"))),
+       aes(x=variable,y=estimate,ymin=CI_lower,ymax=CI_upper,
+                             fill=term))+
+  geom_bar(stat="identity")+facet_wrap(~treat)
+```
+
+#### Figure 3
+
+```{r}
+fig3<-ggplot()+
+  geom_bar(data=Props_var_temp_mf%>%
+             filter(term!="temp_father+temp_mother"&term!="Full")%>%
+             mutate(term=factor(term,levels=c("temp_father","temp_mother"),
+                                labels=c("Temperature sire","Temperature dam")),
+                    variable=factor(variable,levels=c("veg","FFD","MFD","LFD")),
+                    sig=c("n","n","n","n","n","n","n","n",
+                          "n","n","n","n","n","n","y","n")),
+           aes(x=variable,y=estimate,fill=term),
+           stat="identity")+facet_wrap(~treat)+
+  geom_point(data=Props_var_temp_mf%>%
+               filter(term!="temp_father+temp_mother"&term!="Full")%>%
+               mutate(term=factor(term,levels=c("temp_father","temp_mother"),
+                                  labels=c("Temperature sire",
+                                           "Temperature dam")),
+                      variable=factor(variable,
+                                      levels=c("veg","FFD","MFD","LFD")),
+                      sig=c("n","n","n","n","n","n","n","n",
+                            "n","n","n","n","n","n","y","n")),
+             aes(x=variable,y=estimate,group=term,shape=sig),
+             position=position_stack(vjust=.5),show.legend=F,size=2)+
+  my_theme_legend()+scale_fill_discrete(type=c("#00BFC4","#F8766D"))+
+  scale_shape_manual(values=c(NA,8))+
+  xlab(NULL)+ylab("Proportion of variance")+
+  theme(legend.position="top",legend.title=element_blank())
+fig3
+ggsave(file="output/figures/fig3.tiff", plot=fig3,width=5,height=4,dpi=300,
+       compression="lzw")
+```
+
+#### Figure 4
+
+```{r}
+fig4<-ggplot()+
+  geom_ribbon(data=data.frame(ggpredict(model3_MFD_h,
+                                        terms=c("temp_sire"))),
+              aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
+              fill="red",alpha=0.25)+
+  geom_line(data=data.frame(ggpredict(model3_MFD_h,
+                                      terms=c("temp_sire"))),
+            aes(x=x,y=predicted),color="red")+
+  # geom_ribbon(data=data.frame(ggpredict(model3_MFD_uh,
+  #                                       terms=c("temp_sire"))),
+  #             aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
+  #             fill="blue",alpha=0.25)+
+  # geom_line(data=data.frame(ggpredict(model3_MFD_uh,
+  #                                     terms=c("temp_sire"))),
+  #           aes(x=x,y=predicted),color="blue",linetype="dashed")+
+  geom_ribbon(data=data.frame(ggemmeans(model4_MFD,
+                                        terms=c("temp_sire"))),
+              aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
+              fill="darkgrey",alpha=0.25)+
+  geom_line(data=data.frame(ggemmeans(model4_MFD,
+                                      terms=c("temp_sire"))),
+            aes(x=x,y=predicted))+
+  geom_jitter(data=data_exp,
+              aes(x=temp_sire,y=MFD,color=treat),size=1.5,alpha=0.1)+
+  scale_color_manual(values=c("blue","red"),limits=c("unheated","heatmat"),
+                     labels=c("unheated","heated"))+
+  my_theme_legend()+xlab("Sire temperature")+ylab("Mean flowering date")+
+  theme(legend.position="top",legend.title=element_blank())
+fig4
+ggsave(file="output/figures/fig4.tiff", plot=fig4,width=4,height=5,dpi=300,
+       compression="lzw")
+```
+
+
+### Models mid-parental values
+
+```{r}
+data_exp<-data_exp%>%
+  mutate(temp_midP=(temp_sire+temp_dam)/2)
+```
+
+```{r}
+model3_veg_uh_midP<-lmer(mean_sh_growth~temp_midP+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"&!is.na(mean_sh_growth)))
+model3_veg_h_midP<-lmer(mean_sh_growth~temp_midP+
+                     (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"&!is.na(mean_sh_growth)))
+model3_FFD_uh_midP<-lmer(FFD~temp_midP+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"&!is.na(FFD)))
+model3_FFD_h_midP<-lmer(FFD~temp_midP+
+                     (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"&!is.na(FFD)))
+model3_LFD_uh_midP<-lmer(LFD~temp_midP+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"&!is.na(LFD)))
+model3_LFD_h_midP<-lmer(LFD~temp_midP+
+                     (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"&!is.na(LFD)))
+model3_MFD_uh_midP<-lmer(MFD~temp_midP+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="unheated"&!is.na(MFD)))
+model3_MFD_h_midP<-lmer(MFD~temp_midP+
+                     (1|sire)+(1|dam)+(1|sire:dam),
+                 subset(data_exp,treat=="heatmat"&!is.na(MFD)))
+summary(model3_veg_uh_midP)
+summary(model3_veg_h_midP)
+summary(model3_FFD_uh_midP)
+summary(model3_FFD_h_midP)
+summary(model3_LFD_uh_midP)
+summary(model3_LFD_h_midP)
+summary(model3_MFD_uh_midP)
+summary(model3_MFD_h_midP)
+```
+
+```{r}
+plot(ggpredict(model3_MFD_h_midP,terms=c("temp_midP")))
+```
+
+#### Appendix S3
+
+```{r}
+tab_model(model3_veg_uh_midP,model3_FFD_uh_midP,model3_MFD_uh_midP,
+          model3_LFD_uh_midP,
+          transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
+          show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
+          dv.labels=c("Vegetative growth","FFD","MFD","LFD"),
+          file="output/tables/AppS3_uh.html")
+tab_model(model3_veg_h_midP,model3_FFD_h_midP,model3_MFD_h_midP,
+          model3_LFD_h_midP,
+          transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
+          show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
+          dv.labels=c("Vegetative growth","FFD","MFD","LFD"),
+          file="output/tables/AppS3_h.html")
+```
+
+
+#### Proportions of variance
+
+Proportion of variance explained by temperature of origin of sires and dams = proportion of variance explained by fixed effects: marginal R2.
+
+```{r}
+PropVar_veg_uh_temp_midP<-as.numeric(r2_nakagawa(model3_veg_uh_midP,
+                                            tolerance=1e-324)$R2_marginal)
+PropVar_veg_h_temp_midP<-as.numeric(r2_nakagawa(model3_veg_h_midP)$R2_marginal)
+PropVar_FFD_uh_temp_midP<-as.numeric(r2_nakagawa(model3_FFD_uh_midP)$R2_marginal)
+PropVar_FFD_h_temp_midP<-as.numeric(r2_nakagawa(model3_FFD_h_midP)$R2_marginal)
+PropVar_LFD_uh_temp_midP<-as.numeric(r2_nakagawa(model3_LFD_uh_midP)$R2_marginal)
+PropVar_LFD_h_temp_midP<-as.numeric(r2_nakagawa(model3_LFD_h_midP)$R2_marginal)
+PropVar_MFD_uh_temp_midP<-as.numeric(r2_nakagawa(model3_MFD_uh_midP)$R2_marginal)
+PropVar_MFD_h_temp_midP<-as.numeric(r2_nakagawa(model3_MFD_h_midP)$R2_marginal)
+Props_var_temp_midP<-data.frame(
+  values=c(PropVar_veg_uh_temp_midP,PropVar_veg_h_temp_midP,
+           PropVar_FFD_uh_temp_midP,PropVar_FFD_h_temp_midP,
+           PropVar_LFD_uh_temp_midP,PropVar_LFD_h_temp_midP,
+           PropVar_MFD_uh_temp_midP,PropVar_MFD_h_temp_midP),
+  variable=c("veg","veg","FFD","FFD","LFD","LFD","MFD","MFD"),
+  treat=c("unheated","heated","unheated","heated","unheated","heated",
+                 "unheated","heated"))
+```
+
+```{r}
+ggplot(Props_var_temp_midP,aes(x=variable,y=values,fill=treat))+
+  geom_bar(stat="identity",position="dodge")
+```
+
+## Prediction 4
+
+### Models
+
+```{r}
+model4_veg<-lmer(mean_sh_growth~treat*(temp_sire+temp_dam)+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam),
+                  data_exp)
+model4_FFD<-lmer(FFD~treat*(temp_sire+temp_dam)+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam),
+                  data_exp)
+model4_LFD<-lmer(LFD~treat*(temp_sire+temp_dam)+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam),
+                  data_exp)
+model4_MFD<-lmer(MFD~treat*(temp_sire+temp_dam)+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam),
+                  subset(data_exp,!is.na(MFD)))
+summary(model4_veg)
+summary(model4_FFD)
+summary(model4_LFD)
+summary(model4_MFD)
+```
+
+
+Interactions treat:temp_sire and treat:temp_dam never significant. No temperature-related differences among sires and dams in the response to the temperature treatment = No genetic differentiation related to origin temperature in the slope of RNs.
+
+Effect of temp_sire significant in the model for MFD: genetic differentiation in the elevation of RNs related to origin temperature of sire. 
+
+```{r}
+plot(ggpredict(model4_MFD,terms=c("temp_sire")))
+```
+
+```{r}
+grid.arrange(
+  grid.arrange(
+    plot(ggpredict(model4_veg,terms=c("treat","temp_sire[minmax]")),
+         connect_lines=T),
+    plot(ggpredict(model4_veg,terms=c("treat","temp_dam[minmax]")),
+         connect_lines=T),
+    ncol=2),
+  grid.arrange(
+    plot(ggpredict(model4_FFD,terms=c("treat","temp_sire[minmax]")),
+         connect_lines=T),
+    plot(ggpredict(model4_FFD,terms=c("treat","temp_dam[minmax]")),
+         connect_lines=T),
+    ncol=2),
+  grid.arrange(
+    plot(ggpredict(model4_LFD,terms=c("treat","temp_sire[minmax]")),
+         connect_lines=T),
+    plot(ggpredict(model4_LFD,terms=c("treat","temp_dam[minmax]")),
+         connect_lines=T),
+    ncol=2),
+  grid.arrange(
+    plot(ggpredict(model4_MFD,terms=c("treat","temp_sire[minmax]")),
+         connect_lines=T),
+    plot(ggpredict(model4_MFD,terms=c("treat","temp_dam[minmax]")),
+         connect_lines=T),
+    ncol=2),
+  ncol=1)
+```
+
+#### Table 3
+
+```{r}
+tab_model(model4_veg,model4_FFD,model4_MFD,model4_LFD,
+          transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
+          show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
+          dv.labels=c("Vegetative growth","FFD","MFD","LFD"),
+          file="output/tables/Table3.html")
+```
+
+### Models mid-parental values
+
+```{r}
+model4_veg_midP<-lmer(mean_sh_growth~treat*temp_midP+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam),
+                  data_exp)
+model4_FFD_midP<-lmer(FFD~treat*temp_midP+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam),
+                  data_exp)
+model4_LFD_midP<-lmer(LFD~treat*temp_midP+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam),
+                  data_exp)
+model4_MFD_midP<-lmer(MFD~treat*temp_midP+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam),
+                  data_exp)
+summary(model4_veg_midP)
+summary(model4_FFD_midP)
+summary(model4_LFD_midP)
+summary(model4_MFD_midP)
+```
+
+```{r}
+plot(ggpredict(model4_MFD_midP,terms=c("temp_midP")))
+```
+
+#### Appendix S4
+
+```{r}
+tab_model(model4_veg_midP,model4_FFD_midP,model4_MFD_midP,model4_LFD_midP,
+          transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
+          show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
+          dv.labels=c("Vegetative growth","FFD","MFD","LFD"),
+          file="output/tables/AppS4.html")
+```
+
+# STANDBY: Analyses with animal models (Bayesian)
+
+Using only offspring from crosses.
+
+Create pedigree:
+
+```{r}
+data_ped_cross<-data.frame(unique(select(data_exp,unique_id,dam,sire)))
+```
+
+To be able to fit an animal model, brms needs the relativeness (relationship) matrix of the pedigree and not its inverse (as in other softwares). This can be estimated using the nadiv package.
+
+Create the relativeness (relationship) matrix of the pedigree:
+
+```{r}
+Amat_cross <- as.matrix(makeA(prepPed(data_ped_cross,check=T)))
+```
+
+## Prediction 1a
+
+### Models
+
+```{r eval=FALSE, include=FALSE}
+Bmodel1a_veg_uh <- brm(
+  mean_sh_growth ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
+  data = subset(data_exp,treat=="unheated"),
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
+)
+save(Bmodel1a_veg_uh, file = "output/models/Bmodel1a_veg_uh.rda")
+# Warning messages:
+# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
+# 2: There were 376 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+```
+
+```{r eval=FALSE, include=FALSE}
+Bmodel1a_veg_h <- brm(
+  mean_sh_growth ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
+  data = subset(data_exp,treat=="heatmat"),
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
+)
+save(Bmodel1a_veg_h, file = "output/models/Bmodel1a_veg_h.rda")
+# Warning messages:
+# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
+# 2: There were 277 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+```
+
+```{r eval=FALSE, include=FALSE}
+Bmodel1a_FFD_uh <- brm(
+  FFD ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
+  data = subset(data_exp,treat=="unheated"),
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
+)
+save(Bmodel1a_FFD_uh, file = "output/models/Bmodel1a_FFD_uh.rda")
+# Warning messages:
+# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
+# 2: There were 484 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+```
+
+```{r eval=FALSE, include=FALSE}
+Bmodel1a_FFD_h <- brm(
+  FFD ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
+  data = subset(data_exp,treat=="heatmat"),
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
+)
+save(Bmodel1a_FFD_h, file = "output/models/Bmodel1a_FFD_h.rda")
+# Warning messages:
+# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
+# 2: There were 570 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+```
+
+```{r eval=FALSE, include=FALSE}
+Bmodel1a_LFD_uh <- brm(
+  LFD ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
+  data = subset(data_exp,treat=="unheated"),
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
+)
+save(Bmodel1a_LFD_uh, file = "output/models/Bmodel1a_LFD_uh.rda")
+# Warning messages:
+# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
+# 2: There were 686 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+```
+
+```{r eval=FALSE, include=FALSE}
+Bmodel1a_LFD_h <- brm(
+  LFD ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
+  data = subset(data_exp,treat=="heatmat"),
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
+)
+save(Bmodel1a_LFD_h, file = "output/models/Bmodel1a_LFD_h.rda")
+# Warning messages:
+# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
+# 2: There were 416 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+```
+
+# HERE: RUN
+
+```{r eval=FALSE, include=FALSE}
+Bmodel1a_date50_uh <- brm(
+  date50 ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
+  data = subset(data_exp,treat=="unheated"),
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 15000, warmup = 3000, thin = 5
+)
+save(Bmodel1a_date50_uh, file = "output/models/Bmodel1a_date50_uh.rda")
+# Warning messages:
+# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
+# 2: There were 178 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+```
+
+```{r eval=FALSE, include=FALSE}
+Bmodel1a_date50_h <- brm(
+  date50 ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
+  data = subset(data_exp,treat=="heatmat"),
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
+)
+save(Bmodel1a_date50_h, file = "output/models/Bmodel1a_date50_h.rda")
+# Warning message:
+# There were 403 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+```
+
+```{r}
+load("output/models/Bmodel1a_veg_uh.rda")
+load("output/models/Bmodel1a_veg_h.rda")
+load("output/models/Bmodel1a_FFD_uh.rda")
+load("output/models/Bmodel1a_FFD_h.rda")
+load("output/models/Bmodel1a_LFD_uh.rda")
+load("output/models/Bmodel1a_LFD_h.rda")
+load("output/models/Bmodel1a_date50_uh.rda")
+load("output/models/Bmodel1a_date50_h.rda")
+summary(Bmodel1a_veg_uh)
+summary(Bmodel1a_veg_h)
+summary(Bmodel1a_FFD_uh)
+summary(Bmodel1a_FFD_h)
+summary(Bmodel1a_LFD_uh)
+summary(Bmodel1a_LFD_h)
+summary(Bmodel1a_date50_uh)
+summary(Bmodel1a_date50_h)
+```
+
+
+### Proportions of variance
+
+```{r}
+varcomps_Bmodel1a_veg_uh <- tibble(
+  beta0 = posterior_samples(Bmodel1a_veg_uh,pars="b_Intercept")[,1],
+  VI = (VarCorr(Bmodel1a_veg_uh,summary=F)$unique_id$sd[,"Intercept"])^2,
+  VM = (VarCorr(Bmodel1a_veg_uh,summary=F)$dam$sd[,"Intercept"])^2,
+  VR=(posterior_samples(Bmodel1a_veg_uh,pars="sigma")[,1])^2
+  ) %>% 
+  mutate(VP = select(.,c(VI,VM,VR)) %>% rowSums()) %>% 
+  mutate(.iteration = 1) %>% mutate(.iteration = cumsum(.iteration))
+```
+
+```{r}
+varcomps_Bmodel1a_veg_uh %>% 
+  pivot_longer(cols=c(VI:VR),names_to = "varcomp" , values_to = "variance") %>% 
+  mutate(varcomp=fct_relevel(varcomp,c("VR","VI","VM"))) %>% 
+  ggplot()+
+  stat_halfeye(aes(y=varcomp,x=100*variance/VP),
+                point_interval = mean_hdi,.width = 0.001,
+                normalize="xy")+
+  scale_x_continuous(name="Variance explained (%)",
+                     lim=c(0,100),breaks=seq(from=0,to=100,by=10))+
+  scale_y_discrete(name="Variance component",
+                   labels=c(expression(italic(V[Residual])),
+                            expression(italic(V[Individual])),
+                            expression(italic(V[dam]))
+                            ))+
+  my_theme()+
+  background_grid(colour.major = "grey95",colour.minor = "grey95")+
+  ggtitle("Partitioning of total phenotypic variation for Vegetative phenology\nUH treatment")+
+  labs(caption = expression(paste("Total phenotypic variance =",
+                                  italic(V[dam]),
+                           " + ", italic(V[Individual]),
+                           " + ", italic(V[Residual])
+                           )))
+```
+
+[...]
+
+```{r}
+varcomps_Bmodel1a_date50_uh <- tibble(
+  beta0 = posterior_samples(Bmodel1a_date50_uh,pars="b_Intercept")[,1],
+  VI = (VarCorr(Bmodel1a_date50_uh,summary=F)$unique_id$sd[,"Intercept"])^2,
+  VM = (VarCorr(Bmodel1a_date50_uh,summary=F)$dam$sd[,"Intercept"])^2,
+  VR=(posterior_samples(Bmodel1a_date50_uh,pars="sigma")[,1])^2
+  ) %>% 
+  mutate(VP = select(.,c(VI,VM,VR)) %>% rowSums()) %>% 
+  mutate(.iteration = 1) %>% mutate(.iteration = cumsum(.iteration))
+```
+
+```{r}
+varcomps_Bmodel1a_date50_uh %>% 
+  pivot_longer(cols=c(VI:VR),names_to = "varcomp" , values_to = "variance") %>% 
+  mutate(varcomp=fct_relevel(varcomp,c("VR","VI","VM"))) %>% 
+  ggplot()+
+  stat_halfeye(aes(y=varcomp,x=100*variance/VP),
+                point_interval = mean_hdi,.width = 0.001,
+                normalize="xy")+
+  scale_x_continuous(name="Variance explained (%)",
+                     lim=c(0,100),breaks=seq(from=0,to=100,by=10))+
+  scale_y_discrete(name="Variance component",
+                   labels=c(expression(italic(V[Residual])),
+                            expression(italic(V[Individual])),
+                            expression(italic(V[dam]))
+                            ))+
+  my_theme()+
+  background_grid(colour.major = "grey95",colour.minor = "grey95")+
+  ggtitle("Partitioning of total phenotypic variation for date50\nUH treatment")+
+  labs(caption = expression(paste("Total phenotypic variance =",
+                                  italic(V[dam]),
+                           " + ", italic(V[Individual]),
+                           " + ", italic(V[Residual])
+                           )))
+```
+
+```{r}
+varcomps_Bmodel1a_date50_h <- tibble(
+  beta0 = posterior_samples(Bmodel1a_date50_h,pars="b_Intercept")[,1],
+  VI = (VarCorr(Bmodel1a_date50_h,summary=F)$unique_id$sd[,"Intercept"])^2,
+  VM = (VarCorr(Bmodel1a_date50_h,summary=F)$dam$sd[,"Intercept"])^2,
+  VR=(posterior_samples(Bmodel1a_date50_h,pars="sigma")[,1])^2
+  ) %>% 
+  mutate(VP = select(.,c(VI,VM,VR)) %>% rowSums()) %>% 
+  mutate(.iteration = 1) %>% mutate(.iteration = cumsum(.iteration))
+```
+
+```{r}
+varcomps_Bmodel1a_date50_h %>% 
+  pivot_longer(cols=c(VI:VR),names_to = "varcomp" , values_to = "variance") %>% 
+  mutate(varcomp=fct_relevel(varcomp,c("VR","VI","VM"))) %>% 
+  ggplot()+
+  stat_halfeye(aes(y=varcomp,x=100*variance/VP),
+                point_interval = mean_hdi,.width = 0.001,
+                normalize="xy")+
+  scale_x_continuous(name="Variance explained (%)",
+                     lim=c(0,100),breaks=seq(from=0,to=100,by=10))+
+  scale_y_discrete(name="Variance component",
+                   labels=c(expression(italic(V[Residual])),
+                            expression(italic(V[Individual])),
+                            expression(italic(V[dam]))
+                            ))+
+  my_theme()+
+  background_grid(colour.major = "grey95",colour.minor = "grey95")+
+  ggtitle("Partitioning of total phenotypic variation for date50\nH treatment")+
+  labs(caption = expression(paste("Total phenotypic variance =",
+                                  italic(V[dam]),
+                           " + ", italic(V[Individual]),
+                           " + ", italic(V[Residual])
+                           )))
+```
+
+### Heritability and maternal effects
+
+```{r}
+v_animal_Bmodel1a_veg_uh<-(VarCorr(Bmodel1a_veg_uh,
+                                        summary=FALSE)$unique_id$sd)^2
+v_dam_Bmodel1a_veg_uh<-(VarCorr(Bmodel1a_veg_uh,
+                                      summary=FALSE)$dam$sd)^2
+v_res_Bmodel1a_veg_uh<-(VarCorr(Bmodel1a_veg_uh,
+                                   summary=FALSE)$residual$sd)^2
+h_Bmodel1a_veg_uh<-as.mcmc(v_animal_Bmodel1a_veg_uh/
+                                  (v_animal_Bmodel1a_veg_uh+
+                                     v_dam_Bmodel1a_veg_uh+
+                                     v_res_Bmodel1a_veg_uh))
+m_Bmodel1a_veg_uh<-as.mcmc(v_dam_Bmodel1a_veg_uh/
+                             (v_animal_Bmodel1a_veg_uh+
+                                v_dam_Bmodel1a_veg_uh+
+                                v_res_Bmodel1a_veg_uh))
+summary(h_Bmodel1a_veg_uh)
+summary(m_Bmodel1a_veg_uh)
+plot(h_Bmodel1a_veg_uh)
+plot(m_Bmodel1a_veg_uh)
+```
+
+[...]
+
+```{r}
+v_animal_Bmodel1a_date50_uh<-(VarCorr(Bmodel1a_date50_uh,
+                                        summary=FALSE)$unique_id$sd)^2
+v_dam_Bmodel1a_date50_uh<-(VarCorr(Bmodel1a_date50_uh,
+                                      summary=FALSE)$dam$sd)^2
+v_res_Bmodel1a_date50_uh<-(VarCorr(Bmodel1a_date50_uh,
+                                   summary=FALSE)$residual$sd)^2
+h_Bmodel1a_date50_uh<-as.mcmc(v_animal_Bmodel1a_date50_uh/
+                                  (v_animal_Bmodel1a_date50_uh+
+                                     v_dam_Bmodel1a_date50_uh+
+                                     v_res_Bmodel1a_date50_uh))
+m_Bmodel1a_date50_uh<-as.mcmc(v_dam_Bmodel1a_date50_uh/
+                             (v_animal_Bmodel1a_date50_uh+
+                                v_dam_Bmodel1a_date50_uh+
+                                v_res_Bmodel1a_date50_uh))
+summary(h_Bmodel1a_date50_uh)
+summary(m_Bmodel1a_date50_uh)
+plot(h_Bmodel1a_date50_uh)
+plot(m_Bmodel1a_date50_uh)
+```
+
+```{r}
+v_animal_Bmodel1a_date50_h<-(VarCorr(Bmodel1a_date50_h,
+                                        summary=FALSE)$unique_id$sd)^2
+v_dam_Bmodel1a_date50_h<-(VarCorr(Bmodel1a_date50_h,
+                                      summary=FALSE)$dam$sd)^2
+v_res_Bmodel1a_date50_h<-(VarCorr(Bmodel1a_date50_h,
+                                   summary=FALSE)$residual$sd)^2
+h_Bmodel1a_date50_h<-as.mcmc(v_animal_Bmodel1a_date50_h/
+                                  (v_animal_Bmodel1a_date50_h+
+                                     v_dam_Bmodel1a_date50_h+
+                                     v_res_Bmodel1a_date50_h))
+m_Bmodel1a_date50_h<-as.mcmc(v_dam_Bmodel1a_date50_h/
+                             (v_animal_Bmodel1a_date50_h+
+                                v_dam_Bmodel1a_date50_h+
+                                v_res_Bmodel1a_date50_h))
+summary(h_Bmodel1a_date50_h)
+summary(m_Bmodel1a_date50_h)
+plot(h_Bmodel1a_date50_h)
+plot(m_Bmodel1a_date50_h)
+```
+
+## Prediction 1b
+
+### Models
+
+```{r eval=FALSE, include=FALSE}
+Bmodel1b_veg <- brm(
+  mean_sh_growth ~ treat*unique_id + # OK like this?
+    (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
+  data = data_exp,
+  data2 = list(Amat_cross = Amat_cross),
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
+)
+save(Bmodel1b_veg, file = "output/models/Bmodel1b_veg.rda")
+```
+
+# Session info
+
+```{r}
+sessionInfo()
+```

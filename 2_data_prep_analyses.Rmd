@@ -37,6 +37,7 @@ library(broom)
 library(broom.mixed)
 library(knitr)
 library(lme4)
+library(lmerTest)
 library(gridExtra)
 library(ggthemes)
 library(kableExtra)
@@ -149,10 +150,11 @@ data_exp%>%group_by(mother_father)%>%summarise(num=n())%>%
 ## Adding shoot info
 
 ```{r}
-data_shoots<-data_shoots%>%mutate(day_diff=date2-date1,
-                                  mean_sh_h_date1=(sh1_date1+sh2_date1+sh3_date1)/3,
-                                  mean_sh_h_date2=(sh1_date2+sh2_date2+sh3_date2)/3,
-                                  mean_sh_growth=mean_sh_h_date2-mean_sh_h_date1)
+data_shoots<-data_shoots%>%
+  mutate(day_diff=date2-date1,
+         mean_sh_h_date1=(sh1_date1+sh2_date1+sh3_date1)/3,
+         mean_sh_h_date2=(sh1_date2+sh2_date2+sh3_date2)/3,
+         mean_sh_growth=mean_sh_h_date2-mean_sh_h_date1)
 ```
 
 ```{r}
@@ -183,7 +185,6 @@ data_selfed_blocks<-data_selfed%>%
   select(!(block_mother:block_father))
 ```
 
-
 # Distributions
 
 ```{r}
@@ -211,15 +212,15 @@ Selfed offpsring from 42 maternal families. id_parent is mother and father. Temp
 data_selfed%>%group_by(id_parent,treat)%>%
   summarise(mean=mean(FFD),sd=sd(FFD))%>%
   ggplot(aes(x=treat,y=mean,group=id_parent,color=id_parent,label=id_parent))+
-  geom_line()+geom_label()+ylab("FFD")
+  geom_line()+geom_label()+ylab("FFD")+my_theme()
 data_selfed%>%group_by(id_parent,treat)%>%
   summarise(mean=mean(LFD),sd=sd(LFD))%>%
   ggplot(aes(x=treat,y=mean,group=id_parent,color=id_parent,label=id_parent))+
-  geom_line()+geom_label()+ylab("LFD")
+  geom_line()+geom_label()+ylab("LFD")+my_theme()
 data_selfed%>%group_by(id_parent,treat)%>%
   summarise(mean=mean(date50),sd=sd(date50))%>%
   ggplot(aes(x=treat,y=mean,group=id_parent,color=id_parent,label=id_parent))+
-  geom_line()+geom_label()+ylab("date50")
+  geom_line()+geom_label()+ylab("date50")+my_theme()
 ```
 
 Differences in RNs between the 42 maternal lines?
@@ -251,10 +252,15 @@ Anova(model_selfed_date50_2)
 For LFD and date 50, differences in elevation related to origin temperature. No differences in slope.
 
 ```{r}
+plot(ggpredict(model_selfed_FFD_2,terms=c("treat")))
+plot(ggpredict(model_selfed_LFD_2,terms=c("treat")))
+plot(ggpredict(model_selfed_date50_2,terms=c("treat")))
 plot(ggpredict(model_selfed_FFD_2,terms=c("temp")))
 plot(ggpredict(model_selfed_LFD_2,terms=c("temp")))
 plot(ggpredict(model_selfed_date50_2,terms=c("temp")))
 ```
+
+Individuals with parents from warmer soils have later LFD and date50 at a given temperature than plants with parents from colder soils, i.e. environmental and genetic effects on flowering time are in opposite directions.
 
 ## LMMs With progeny from crossings
 
@@ -283,6 +289,8 @@ tab_model(model_offpsring_FFD,model_offpsring_LFD,model_offpsring_date50,
 
 Only effects of treatment are significant for FFD and LFD, also temp_father for date50.
 
+Variance for block is zero, maybe we can remove it.
+
 Plot predictions of significant effects
 
 ```{r}
@@ -291,6 +299,8 @@ plot(ggpredict(model_offpsring_LFD,terms=c("treat")))
 plot(ggpredict(model_offpsring_date50,terms=c("treat")))
 plot(ggpredict(model_offpsring_date50,terms=c("temp_father")))
 ```
+
+Individuals with fathers from warmer soils have later date50 at a given temperature than plants with parents from colder soils, i.e. environmental and genetic effects on flowering time are in opposite directions.
 
 Plot predictions of interactions (NS)
 
@@ -301,6 +311,58 @@ plot(ggpredict(model_offpsring_date50,terms=c("temp_mother","treat")))
 plot(ggpredict(model_offpsring_FFD,terms=c("temp_father","treat")))
 plot(ggpredict(model_offpsring_LFD,terms=c("temp_father","treat")))
 plot(ggpredict(model_offpsring_date50,terms=c("temp_father","treat")))
+```
+
+#### Get variance components and calculate heritability
+
+Adapted from Elsa's code! Now done only for FFD.
+
+Refit models with lmer (easier to get variance components, might use these overall in the end).
+Removed block because of singular fit warnings
+
+```{r}
+model_offpsring_FFD_lmer<-lmer(FFD~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father),data_exp_blocks)
+model_offpsring_LFD_lmer<-lmer(LFD~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father),data_exp_blocks)
+model_offpsring_date50_lmer<-lmer(date50~(temp_mother+temp_father)*treat+
+                               (1|mother)+(1|father),data_exp_blocks)
+```
+
+```{r}
+# extract variance components
+Variance_FFD <- as.data.frame(VarCorr(model_offpsring_FFD_lmer))[,c(1,4)] 
+# Intra-class correlation
+PropVar_FFD <- Variance_FFD_treat%>%mutate(propvar=vcov/sum(vcov))
+# Proportional variance
+PropVar_FFD
+```
+
+Heritability and maternal effects
+
+```{r}
+# h^2 (paternal effects)
+as.numeric(4*subset(PropVar_FFD,grp=="father")[3])
+# Because the additive genetic variance, VA,
+# is expected to be four times the among pollen‐donor variance 
+# (Falconer & Mackay, 1996; Lynch & Walsh, 1998)
+```
+
+```{r}
+# maternal effects
+
+# Maternal - paternal
+# ----------------------
+# summed effects
+
+# Because the pollen‐recipient variance component contains a combination of
+# genetic and environmental effects, we subtracted the additive genetic 
+# (pollen donor) component from the pollen-recipient variance component
+# before dividing the resulting estimate by VP to estimate 
+# m2 (m2 = (Vpollen recipient − Vpollen donor)/VP).
+
+(Variance_FFD[1,2]-Variance_FFD[2,2])/
+  as.numeric(Variance_FFD%>%summarise(sum(vcov)))
 ```
 
 ### Vegetative phenology
@@ -324,7 +386,33 @@ tab_model(model_offpsring_veg_phen,
 
 No significant effects.
 
-## Bayesian models
+Variance for block is zero, maybe we can remove it.
+
+## Bayesian models with mother and father
+
+### Crosses
+
+#### date50
+
+```{r eval=FALSE, include=FALSE}
+brms_mf_offpsring_date50_full <- brm(
+  date50~ 1 + (temp_mother+temp_father)*treat +
+    (1|mother) + (1|father) + (1|block) +
+  data = data_exp_blocks,
+  family = gaussian(),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5,
+)
+save(brms_mf_offpsring_date50_full,
+     file = "output/models/brms_mf_offpsring_date50_full.rda")
+```
+
+```{r}
+load("output/models/brms_mf_offpsring_date50_full.rda")
+plot(brms_mf_offpsring_date50_full)
+summary(brms_mf_offpsring_date50_full)
+```
+
+## Bayesian animal models
 
 Fitting animal models with brms package
 
@@ -356,7 +444,7 @@ The random effect is added to the model with the term (1 | gr(animal, cov = Amat
 
 we will use the default priors so far.
 
-Specify model:
+Specify model (with and without block):
 
 ```{r eval=FALSE, include=FALSE}
 brms_offpsring_FFD_full <- brm(
@@ -572,6 +660,8 @@ plot(ggpredict(model_BLUPs,terms=c("temp_father","temp_mother")))
 
 Why interaction?
 
+Now not sure why I did this analysis with BLUPs anymore!
+
 ##### LFD
 
 ```{r eval=FALSE, include=FALSE}
@@ -773,7 +863,10 @@ plot(m_offpsring_FFD_notemp)
 Heritability values are quite similar to the ones from previous model.
 Including temperature of origin in the model does not matter a lot for calculation of heritability.
 
-##### LFD
+##### LFD (model with problems)
+
+Warning message:
+There were 8 divergent transitions after warmup. Increasing adapt_delta above 0.999 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
 
 ```{r eval=FALSE, include=FALSE}
 brms_offpsring_LFD_notemp <- brm(
@@ -783,8 +876,8 @@ brms_offpsring_LFD_notemp <- brm(
   data = data_exp_blocks,
   data2 = list(Amat_cross = Amat_cross),
   family = gaussian(),
-  chains = 4, cores = 16, iter = 10000, warmup = 3000, thin = 5,
-  control = list(adapt_delta = 0.99)
+  chains = 4, cores = 16, iter = 25000, warmup = 5000, thin = 5,
+  control = list(adapt_delta = 0.999)
 )
 save(brms_offpsring_LFD_notemp,
      file = "output/models/brms_offpsring_LFD_notemp.rda")
@@ -811,7 +904,15 @@ cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_offpsring_LFD_notemp))+
 conditional_effects(brms_offpsring_LFD_notemp)
 ```
 
-##### date50
+
+##### date50 (model with problems)
+
+Warning message:
+There were 158 divergent transitions after warmup. Increasing adapt_delta above 0.99 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup
+
+Warning messages:
+1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
+2: There were 2192 divergent transitions after warmup. Increasing adapt_delta above 0.999 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
 
 ```{r eval=FALSE, include=FALSE}
 brms_offpsring_date50_notemp <- brm(
@@ -821,8 +922,8 @@ brms_offpsring_date50_notemp <- brm(
   data = data_exp_blocks,
   data2 = list(Amat_cross = Amat_cross),
   family = gaussian(),
-  chains = 4, cores = 16, iter = 15000, warmup = 6000, thin = 5,
-  control = list(adapt_delta = 0.99)
+  chains = 4, cores = 16, iter = 25000, warmup = 5000, thin = 5,
+  control = list(adapt_delta = 0.999)
 )
 save(brms_offpsring_date50_notemp,
      file = "output/models/brms_offpsring_date50_notemp.rda")
@@ -1144,9 +1245,82 @@ plot(h2_all_FFD_full)
 plot(m2_all_FFD_full)
 ```
 
-##### LFD
+##### LFD (model with problems)
 
-##### date50
+Warning messages:
+1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
+2: There were 152 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+
+```{r eval=FALSE, include=FALSE}
+brms_all_LFD_full <- brm(
+  LFD~ 1 + (temp_mother+temp_father)*treat + 
+    (1 | gr(unique_id, cov = Amat_all)) + (1 | block) + 
+    (1|mother), # To account for maternal effects
+  data = data_all,
+  data2 = list(Amat_all = Amat_all),
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
+)
+save(brms_all_LFD_full, 
+     file = "output/models/brms_all_LFD_full.rda")
+```
+
+Model diagnostics, examine variance estimate and distributions:
+
+```{r}
+load("output/models/brms_all_LFD_full.rda")
+plot(brms_all_LFD_full)
+summary(brms_all_LFD_full)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_all_LFD_full))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_all_LFD_full))+my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
+
+##### date50 (model with problems)
+
+Warning messages:
+1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
+2: There were 165 divergent transitions after warmup. Increasing adapt_delta above 0.99 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+
+```{r eval=FALSE, include=FALSE}
+brms_all_date50_full <- brm(
+  date50~ 1 + (temp_mother+temp_father)*treat + 
+    (1 | gr(unique_id, cov = Amat_all)) + (1 | block) + 
+    (1|mother), # To account for maternal effects
+  data = data_all,
+  data2 = list(Amat_all = Amat_all),
+  chains = 4, cores = 16, iter = 10000, warmup = 3000, thin = 5,
+  control = list(adapt_delta = 0.99)
+)
+save(brms_all_date50_full, 
+     file = "output/models/brms_all_date50_full.rda")
+```
+
+Model diagnostics, examine variance estimate and distributions:
+
+```{r}
+load("output/models/brms_all_date50_full.rda")
+plot(brms_all_date50_full)
+summary(brms_all_date50_full)
+```
+
+```{r}
+cowplot::plot_grid(mcmc_rhat_hist(brms::rhat(brms_all_date50_full))+
+                     my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          mcmc_neff_hist(neff_ratio(brms_all_date50_full))+my_theme_legend()+
+            theme(legend.position="top")+
+            theme(legend.text=element_text(size=10)),
+          labels = c("A)","B)"),label_fontfamily="serif")
+```
 
 #### Both treatments, no origin temperatures
 
@@ -1220,9 +1394,9 @@ plot(h_all_FFD_notemp)
 plot(m_all_FFD_notemp)
 ```
 
-##### LFD
+##### RUN: LFD
 
-##### date50
+##### RUN: date50
 
 #### Without treatments, without origin temperatures
 
@@ -1290,9 +1464,9 @@ plot(h_all_FFD_notreat_notemp)
 plot(m_all_FFD_notreat_notemp)
 ```
 
-##### LFD
+##### RUN: LFD
 
-##### date50
+##### RUN: date50
 
 
 ### BIVARIATE - not working!
@@ -1340,16 +1514,21 @@ brms_biv_offspring_FFD <- brm(
 save(brms_biv_offspring_FFD, file = "output/models/brms_biv_offspring_FFD.rda")
 ```
 
-### Separate for H and UH: Run more iterations!
+### RUN: Separate for H and UH: Run more iterations!
+
+#### RUNNING: Crosses
+
+Warning message:
+There were 342 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
 
 ```{r eval=FALSE, include=FALSE}
 brms_offpsring_FFD_full.h <- brm(
-  FFD ~ 1 + (temp_mother+temp_father)+
-    (1 | gr(unique_id, cov = Amat_cross))+ (1 | block) + (1|mother), 
+  FFD ~ 1 + (scale(temp_mother)+scale(temp_father))+
+    (1 | gr(unique_id, cov = Amat_cross))+ (1 | block)+ (1|mother), 
   data = subset(data_exp_blocks,treat=="heatmat"),
   data2 = list(Amat_cross = Amat_cross),
   family = gaussian(),
-  chains = 2, cores = 1, iter = 1000
+  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
 )
 save(brms_offpsring_FFD_full.h, file = "output/models/brms_offpsring_FFD_full.h.rda")
 ```
