@@ -1,0 +1,263 @@
+---
+title: Genetic differentiation on flowering time in Cerastium fontanum using a greenhouse
+  experiment
+subtitle: Logger data
+author: "Alicia Valdés"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 4
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    df_print: paged
+  word_document:
+    toc: yes
+    toc_depth: '4'
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+options(tibble.width = Inf)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r load packages, include=FALSE}
+library(tidyverse)
+library(RColorBrewer)
+```
+
+```{r Define ggplot themes and palettes, include=FALSE}
+my_theme <- function(){
+  theme_base()+theme(plot.background=element_rect(fill="white", colour=NA))+
+  theme(legend.position="none")+theme(text=element_text(family="serif"))+
+  theme(plot.title = element_text(hjust =-0.06))
+}
+my_theme_legend <- function(){
+  theme_base()+theme(plot.background=element_rect(fill="white", colour=NA))+
+  theme(text=element_text(family="serif"))+
+  theme(plot.title = element_text(hjust =-0.06))
+}
+myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
+```
+
+# Data preparation
+
+## Read data from txt files
+
+```{r, warning=FALSE, message=FALSE}
+data1K<-read_delim("data/raw/Greenhouse_logger_data/1K.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`9K4`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="1K",
+         type="soil",treat="control")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data2K<-read_delim("data/raw/Greenhouse_logger_data/2K.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`9K3`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="2K",
+         type="soil",treat="control")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data3K<-read_delim("data/raw/Greenhouse_logger_data/3K.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`9K2`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="3K",
+         type="soil",treat="control")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data3K_Air_temp<-read_delim("data/raw/Greenhouse_logger_data/3K_Air_temp.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`9K1`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="3K_Air_temp",
+         type="air",treat="control")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data4V<-read_delim("data/raw/Greenhouse_logger_data/4V.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`9V4`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="4V",
+         type="soil",treat="heated")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data4V_Air_temp<-read_delim("data/raw/Greenhouse_logger_data/4V_Air_temp.txt",
+                            delim=",",locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`9V3`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="4V_Air_temp",
+         type="air",treat="heated")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data5V_924readings<-read_delim("data/raw/Greenhouse_logger_data/5V_924readings.txt",
+                            delim=",",locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`9V2`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="5V_924readings",
+         type="soil",treat="heated")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data6V<-read_delim("data/raw/Greenhouse_logger_data/6V.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`9V1`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="6V",
+         type="soil",treat="heated")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data7V<-read_delim("data/raw/Greenhouse_logger_data/7V.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`10V4`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="7V",
+         type="soil",treat="heated")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data8V<-read_delim("data/raw/Greenhouse_logger_data/8V.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`10V3`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="8V",
+         type="soil",treat="heated")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data8V_Air_temp<-read_delim("data/raw/Greenhouse_logger_data/8V_Air_temp.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`10V2`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="8V_Air_temp",
+         type="air",treat="heated")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data9V<-read_delim("data/raw/Greenhouse_logger_data/9V.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`10V1`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="9V",
+         type="soil",treat="heated")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data10K<-read_delim("data/raw/Greenhouse_logger_data/10K.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`10K4`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="10K",
+         type="soil",treat="control")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data11K<-read_delim("data/raw/Greenhouse_logger_data/11K.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`10K2`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="11K",
+         type="soil",treat="control")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data11K_Air_temp<-read_delim("data/raw/Greenhouse_logger_data/11K_Air_temp.txt",
+                             delim=",",locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`10K3`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="11K_Air_temp",
+         type="air",treat="control")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+data12K<-read_delim("data/raw/Greenhouse_logger_data/12K.txt",delim=",",
+                   locale=locale(encoding="latin1"))%>%
+  mutate(dew_point=extract_numeric(`Dew Point(°C)`),
+         serial_nr=first(`Serial Number`),record_id=`10K1`,time=Time,
+         temp=`Celsius(°C)`,humidity=`Humidity(%rh)`,logger_name="12K",
+         type="soil",treat="control")%>%
+  dplyr::select(record_id,time,temp,humidity,dew_point,serial_nr,logger_name,
+                type,treat)
+```
+
+## Merge all logger data
+
+```{r}
+data_loggers<-rbind(data1K,data2K,data3K,data3K_Air_temp,data4V,data4V_Air_temp,
+                    data5V_924readings,data6V,data7V,data8V,data8V_Air_temp,
+                    data9V,data10K,data11K,data11K_Air_temp,data12K)%>%
+  mutate(serial_nr=as.factor(serial_nr),logger_name=as.factor(logger_name),
+         type=as.factor(type))
+```
+
+# Calculations
+
+```{r}
+data_loggers%>%filter(time<"2022-06-16")%>%
+  group_by(logger_name,treat)%>%summarise(mean_temp=mean(temp))
+data_loggers%>%filter(time<"2022-06-16")%>%group_by(logger_name,treat)%>%
+  summarise(min_temp=min(temp),max_temp=max(temp))%>%
+  mutate(range_temp=max_temp-min_temp)
+ggplot(data_loggers%>%filter(time<"2022-06-16"),aes(x=treat,y=temp))+
+  geom_boxplot()
+ggplot(data_loggers%>%filter(time<"2022-06-16"),
+       aes(x=logger_name,y=temp,color=treat))+facet_wrap(~treat,scales="free")+
+  geom_boxplot()+theme(legend.position="top")
+```
+
+```{r}
+ggplot(data_loggers%>%filter(time<"2022-06-16"),
+       aes(x=time,y=temp,color=treat,shape=type))+geom_line()+
+  facet_wrap(~logger_name)
+```
+
+# Add location: soil or air
+
+```{r}
+data_loggers<-data_loggers%>%
+  mutate(location=ifelse(grepl("Air",logger_name),"air","soil"))
+```
+
+# For paper
+
+```{r}
+data_loggers%>%filter(time<"2022-06-16")%>%
+  group_by(logger_name,treat,location)%>%
+  summarise(,mean_temp=mean(temp),var_temp=var(temp),min_temp=min(temp),max_temp=max(temp))%>%
+  mutate(range_temp=max_temp-min_temp)
+```
+
+```{r}
+ggplot(data_loggers%>%filter(time<"2022-06-16"),
+       aes(x=logger_name,y=temp,color=treat))+facet_wrap(~treat,scales="free")+
+  geom_boxplot()+theme(legend.position="top")
+```
+
+```{r}
+data_loggers%>%filter(time<"2022-06-16")%>%
+  group_by(treat,location)%>%
+  summarise(,mean_temp=mean(temp),var_temp=var(temp),min_temp=min(temp),max_temp=max(temp))%>%
+  mutate(range_temp=max_temp-min_temp)
+```
+
+```{r}
+ggplot(data_loggers%>%filter(time<"2022-06-16"),aes(x=location,y=temp,color=treat))+
+  geom_boxplot()
+```
+
+```{r}
+data_loggers%>%filter(time<"2022-06-16")%>%
+  group_by(treat)%>%
+  summarise(,mean_temp=mean(temp),var_temp=var(temp),min_temp=min(temp),max_temp=max(temp))%>%
+  mutate(range_temp=max_temp-min_temp)
+```
+
+```{r}
+ggplot(data_loggers%>%filter(time<"2022-06-16"),aes(x=treat,y=temp))+
+  geom_boxplot()
+```
+
+# Session info
+
+```{r}
+sessionInfo()
+```
+

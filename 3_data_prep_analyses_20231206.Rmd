@@ -51,6 +51,7 @@ library(tidybayes)
 library(cowplot)
 library(performance)
 library(partR2)
+library(ggh4x)
 ```
 
 ```{r Define ggplot themes and palettes, include=FALSE}
@@ -207,9 +208,9 @@ hist(data_exp$mean_sh_growth)
 
 All looking quite normal.
 
-# Analyses suggested by Johan
+# Analyses
 
-## Prediction 1a
+## Prediction 1
 
 ### Models
 
@@ -276,7 +277,6 @@ Props_var<-rbind(PropVar_veg_uh,PropVar_FFD_uh,PropVar_LFD_uh,PropVar_MFD_uh,
 ggplot(Props_var,aes(x=variable,y=propvar,fill=grp))+
   geom_col()+facet_wrap(~treat)
 ```
-
 
 ### Heritability and maternal effects
 
@@ -367,7 +367,7 @@ ranova(model1a_MFD_uh)
 ranova(model1a_MFD_h)
 ```
 
-## Prediction 1b
+## Prediction 2
 
 ### Model
 
@@ -493,7 +493,7 @@ ggplot(her_mat_treat,aes(x=variable,y=value,fill=effect))+
   geom_bar(stat="identity",position="dodge")
 ```
 
-This is probably not correct! Can we really get negative maternal effects_
+This is probably not correct! Can we really get negative maternal effects? YES?
 
 ### Table SM: LRTs for variance components
 
@@ -506,7 +506,7 @@ ranova(model1b_LFD)
 ranova(model1b_MFD)
 ```
 
-## Figure 1 (Predictions 1a-1b)
+## Figure 1 (Predictions 1-2)
 
 ```{r}
 Props_var<-Props_var%>%
@@ -516,7 +516,8 @@ Props_var<-Props_var%>%
          sig=c("n","y","y","n","n","y","y","n",
                "n","y","n","n","n","y","y","n",
                "n","y","n","n","y","y","n","n",
-               "n","y","n","n","n","y","n","n")) # Based on LRTs
+               "n","y","n","n","n","y","n","n"))%>% # Based on LRTs
+  mutate(treat=fct_recode(treat,"control"="unheated"))
 Props_var_treat<-Props_var_treat%>%
   mutate(variable=factor(variable,levels=c("veg","FFD","MFD","LFD")),
          grp=factor(grp,levels=c("sire","dam","sire:dam",
@@ -529,8 +530,9 @@ Props_var_treat<-Props_var_treat%>%
 
 ```{r}
 legend_fig1<-get_legend(
-  ggplot(Props_var_treat,aes(x=variable,y=propvar,fill=grp,shape=sig))+
-    geom_col()+
+  ggplot(Props_var_treat%>%filter(grp!="Residual"),
+         aes(x=variable,y=propvar,fill=grp,shape=sig))+
+    geom_col(color="black",size=0.3)+
     geom_point(aes(x=variable,y=propvar,group=grp),
                position=position_stack(vjust=.5),show.legend=F,size=2)+
     my_theme_legend()+
@@ -539,44 +541,46 @@ legend_fig1<-get_legend(
     scale_fill_discrete(labels=c("sire","dam","sire:dam",
                                  "treat:sire","treat:dam","residual"),
                         type=c("#00BFC4","#F8766D","#00BA38","#619CFF",
-                               "#F564E3","#B79F00"))+
-    theme(plot.title = element_text(hjust =-0.15,vjust=-6))+
+                               "#F564E3","grey"))+
     scale_shape_manual(values=c(NA,8))+ggtitle("B)")+
     theme(axis.text.y=element_blank(),axis.title.y=element_blank()))
-fig1_without_legend<-ggarrange(
-    ggplot(Props_var,aes(x=variable,y=propvar,fill=grp,shape=sig))+
-      geom_col()+
-      geom_point(aes(x=variable,y=propvar,group=grp),
-                 position=position_stack(vjust=.5),show.legend=F,size=2)+
-      facet_wrap(~treat)+
-      my_theme()+xlab(NULL)+ylab("Proportion of variance")+
-      scale_fill_discrete(labels=c("sire","dam","sire:dam","residual"),
-                          type=c("#00BFC4","#F8766D","#00BA38","#B79F00"))+
-      guides(fill=guide_legend(nrow=2))+
-      theme(plot.title = element_text(hjust =-0.05,vjust=0))+
-      scale_shape_manual(values=c(NA,8))+ggtitle("A)"),
-    ggplot(Props_var_treat,aes(x=variable,y=propvar,fill=grp,shape=sig))+
-      geom_col()+
-      geom_point(aes(x=variable,y=propvar,group=grp),
-                 position=position_stack(vjust=.5),show.legend=F,size=2)+
-      my_theme()+
-      xlab(NULL)+ylab("Proportion of variance")+
-      scale_fill_discrete(labels=c("sire","dam","sire:dam",
-                                   "treat:sire","treat:dam","residual"),
-                          type=c("#00BFC4","#F8766D","#00BA38","#619CFF",
-                                 "#F564E3","#B79F00"))+
-      theme(plot.title = element_text(hjust =-0.05,vjust=4.3))+
-      scale_shape_manual(values=c(NA,8))+ggtitle("B)")+
-      theme(axis.text.y=element_blank(),axis.title.y=element_blank()),
-    ncol=2,widths=c(0.65,0.35))
+fig1a<-ggplot(Props_var%>%filter(grp!="Residual"),
+              aes(x=variable,y=propvar,fill=grp,shape=sig))+
+  geom_col(color="black",size=0.3)+
+  geom_point(aes(x=variable,y=propvar,group=grp),
+             position=position_stack(vjust=.5),show.legend=F,size=2)+
+  facet_wrap(~treat)+
+  my_theme()+xlab(NULL)+ylab("Proportion of variance")+
+  scale_fill_discrete(labels=c("sire","dam","sire:dam","residual"),
+                      type=c("#00BFC4","#F8766D","#00BA38","grey"))+
+  guides(fill=guide_legend(nrow=2))+
+  theme(plot.title = element_text(hjust =-0.05,vjust=0))+
+  scale_shape_manual(values=c(NA,8))+ggtitle("A)")
+fig1b<-ggplot(Props_var_treat%>%filter(grp!="Residual"),
+              aes(x=variable,y=propvar,fill=grp,shape=sig))+
+  geom_col(color="black",size=0.3)+
+  geom_point(aes(x=variable,y=propvar,group=grp),
+             position=position_stack(vjust=.5),show.legend=F,size=2)+
+  my_theme()+
+  xlab(NULL)+ylab("Proportion of variance")+
+  scale_fill_discrete(labels=c("sire","dam","sire:dam",
+                               "treat:sire","treat:dam","residual"),
+                      type=c("#00BFC4","#F8766D","#00BA38","#619CFF",
+                             "#F564E3","grey"))+
+  theme(plot.title = element_text(hjust =-0.05,vjust=4))+
+  scale_shape_manual(values=c(NA,8))+ggtitle("B)")+
+  theme(axis.title.y=element_blank())
+fig1_without_legend<-cowplot::plot_grid(fig1a,fig1b,
+                                        ncol=2,align="hv",axis="t",
+                                        rel_widths = c(1.7, 1))
 fig1<-grid.arrange(legend_fig1,fig1_without_legend,ncol=1,
                    heights=c(0.1,0.9))
 plot(fig1)
-ggsave(file="output/figures/fig1.tiff", plot=fig1,width=10,height=5,dpi=300,
+ggsave(file="output/figures/fig1.tiff", plot=fig1,width=10,height=7,dpi=300,
        compression="lzw")
 ```
 
-## Table 1 (Predictions 1a-1b)
+## Table 1 (Predictions 1-2)
 
 ```{r}
 her_mat<-her_mat%>%
@@ -590,75 +594,9 @@ her_mat_treat<-her_mat_treat%>%
 her_mat_treat
 ```
 
-## Prediction 2
+## Figure 2 (Prediction 2)
 
 Main effect of temperature treatment NS for vegetative growth, and significant for FFD, LFD and MFD.
-
-```{r}
-grid.arrange(
-  plot(ggpredict(model1b_veg,terms="treat")),
-  plot(ggpredict(model1b_FFD,terms="treat")),
-  plot(ggpredict(model1b_LFD,terms="treat")),
-  plot(ggpredict(model1b_MFD,terms="treat")),
-  ncol=4)
-```
-
-```{r}
-plot_veg<-grid.arrange(
-    ggplot(data.frame(ggpredict(model1b_veg,
-                                terms=c("treat","sire"),type="random")),
-           aes(x=x,y=predicted,color=group,group=group))+
-      geom_point()+geom_line()+my_theme_legend()+
-      scale_color_discrete(name="sire"),
-    ggplot(data.frame(ggpredict(model1b_veg,
-                                terms=c("treat","dam"),type="random")),
-           aes(x=x,y=predicted,color=group,group=group))+
-      geom_point()+geom_line()+my_theme_legend()+
-      scale_color_discrete(name="dam"),
-    ncol=2,top="Vegetative growth")
-plot_FFD<-grid.arrange(
-    ggplot(data.frame(ggpredict(model1b_FFD,
-                                terms=c("treat","sire"),type="random")),
-           aes(x=x,y=predicted,color=group,group=group))+
-      geom_point()+geom_line()+my_theme_legend()+
-      scale_color_discrete(name="sire (*)"),
-    ggplot(data.frame(ggpredict(model1b_FFD,
-                                terms=c("treat","dam"),type="random")),
-           aes(x=x,y=predicted,color=group,group=group))+
-      geom_point()+geom_line()+my_theme_legend()+
-      scale_color_discrete(name="dam"),
-    ncol=2,top="FFD")
-plot_LFD<-grid.arrange(
-    ggplot(data.frame(ggpredict(model1b_LFD,
-                                terms=c("treat","sire"),type="random")),
-           aes(x=x,y=predicted,color=group,group=group))+ 
-      geom_point()+geom_line()+my_theme_legend()+
-      scale_color_discrete(name="sire"),
-    ggplot(data.frame(ggpredict(model1b_LFD,
-                                terms=c("treat","dam"),type="random")),
-           aes(x=x,y=predicted,color=group,group=group))+
-      geom_point()+geom_line()+my_theme_legend()+
-      scale_color_discrete(name="dam"),
-    ncol=2,top="LFD")
-plot_MFD<-grid.arrange(
-    ggplot(data.frame(ggpredict(model1b_MFD,
-                                terms=c("treat","sire"),type="random")),
-           aes(x=x,y=predicted,color=group,group=group))+
-      geom_point()+geom_line()+my_theme_legend()+    
-      scale_color_discrete(name="sire (*)"),
-    ggplot(data.frame(ggpredict(model1b_MFD,
-                                terms=c("treat","dam"),type="random")),
-           aes(x=x,y=predicted,color=group,group=group))+
-      geom_point()+geom_line()+my_theme_legend()+
-      scale_color_discrete(name="dam"),
-    ncol=2,top="MFD")
-plot(plot_veg)
-plot(plot_FFD)
-plot(plot_LFD)
-plot(plot_MFD)
-```
-
-### Figure 2
 
 ```{r}
 data_fig2<-rbind(
@@ -680,31 +618,38 @@ data_fig2<-rbind(
 ```{r}
 fig2<-ggplot()+
   geom_point(data=data_fig2%>%filter(group==1)%>%
-               mutate(x=factor(x,levels=c("unheated","heated"))),
+               mutate(x=factor(x,levels=c("unheated","heated")))%>%
+               mutate(x=fct_recode(x,"control"="unheated")),
              aes(x=x,y=predicted),size=2)+
   geom_errorbar(data=data_fig2%>%filter(group==1)%>%
-                  mutate(x=factor(x,levels=c("unheated","heated"))),
+                  mutate(x=factor(x,levels=c("unheated","heated")))%>%
+               mutate(x=fct_recode(x,"control"="unheated")),
                 aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),width=0.05)+
   geom_line(data=data_fig2%>%filter(group==1)%>%
-              mutate(x=factor(x,levels=c("unheated","heated"))),
+              mutate(x=factor(x,levels=c("unheated","heated")))%>%
+               mutate(x=fct_recode(x,"control"="unheated")),
             aes(x=x,y=predicted,group=variable))+
   geom_line(data=data_fig2%>%filter(group!=1)%>%
-              mutate(x=factor(x,levels=c("unheated","heated"))),
+              mutate(x=factor(x,levels=c("unheated","heated")))%>%
+               mutate(x=fct_recode(x,"control"="unheated")),
             aes(x=x,y=predicted,group=group,color=group),linewidth=0.2)+
   geom_point(data=data_fig2%>%filter(group==1)%>%
-               mutate(x=factor(x,levels=c("unheated","heated"))),
+               mutate(x=factor(x,levels=c("unheated","heated")))%>%
+               mutate(x=fct_recode(x,"control"="unheated")),
              aes(x=x,y=predicted),size=3)+
   geom_errorbar(data=data_fig2%>%filter(group==1)%>%
-                  mutate(x=factor(x,levels=c("unheated","heated"))),
+                  mutate(x=factor(x,levels=c("unheated","heated")))%>%
+               mutate(x=fct_recode(x,"control"="unheated")),
                 aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
                 width=0.05)+
   geom_line(data=data_fig2%>%filter(group==1)%>%
-              mutate(x=factor(x,levels=c("unheated","heated"))),
+              mutate(x=factor(x,levels=c("unheated","heated")))%>%
+               mutate(x=fct_recode(x,"control"="unheated")),
             aes(x=x,y=predicted,group=variable))+
-  facet_wrap(~variable,ncol=4,scales="free")+my_theme()+
+  facet_wrap(~variable,ncol=2,scales="free")+my_theme()+
   xlab(NULL)+ylab("Value")+scale_x_discrete(expand=c(0.1,0.1))
 fig2
-ggsave(file="output/figures/fig2.tiff", plot=fig2,width=12,height=3,dpi=300,
+ggsave(file="output/figures/fig2.tiff", plot=fig2,width=6,height=5,dpi=300,
        compression="lzw")
 ```
 
@@ -884,21 +829,24 @@ fig3<-ggplot()+
   geom_bar(data=Props_var_temp_mf%>%
              filter(term!="temp_father+temp_mother"&term!="Full")%>%
              mutate(term=factor(term,levels=c("temp_father","temp_mother"),
-                                labels=c("Temperature sire","Temperature dam")),
+                                labels=c("Sire origin temperature",
+                                           "Dam origin temperature")),
                     variable=factor(variable,levels=c("veg","FFD","MFD","LFD")),
                     sig=c("n","n","n","n","n","n","n","n",
-                          "n","n","n","n","n","n","y","n")),
+                          "n","n","n","n","n","n","y","n"))%>%
+               mutate(treat=fct_recode(treat,"control"="unheated")),
            aes(x=variable,y=estimate,fill=term),
-           stat="identity")+facet_wrap(~treat)+
+           stat="identity",color="black",size=0.2)+facet_wrap(~treat)+
   geom_point(data=Props_var_temp_mf%>%
                filter(term!="temp_father+temp_mother"&term!="Full")%>%
                mutate(term=factor(term,levels=c("temp_father","temp_mother"),
-                                  labels=c("Temperature sire",
-                                           "Temperature dam")),
+                                  labels=c("Sire origin temperature",
+                                           "Dam origin temperature")),
                       variable=factor(variable,
                                       levels=c("veg","FFD","MFD","LFD")),
                       sig=c("n","n","n","n","n","n","n","n",
-                            "n","n","n","n","n","n","y","n")),
+                            "n","n","n","n","n","n","y","n"))%>%
+               mutate(treat=fct_recode(treat,"control"="unheated")),
              aes(x=variable,y=estimate,group=term,shape=sig),
              position=position_stack(vjust=.5),show.legend=F,size=2)+
   my_theme_legend()+scale_fill_discrete(type=c("#00BFC4","#F8766D"))+
@@ -906,46 +854,9 @@ fig3<-ggplot()+
   xlab(NULL)+ylab("Proportion of variance")+
   theme(legend.position="top",legend.title=element_blank())
 fig3
-ggsave(file="output/figures/fig3.tiff", plot=fig3,width=5,height=4,dpi=300,
+ggsave(file="output/figures/fig3.tiff", plot=fig3,width=7,height=6,dpi=300,
        compression="lzw")
 ```
-
-#### Figure 4
-
-```{r}
-fig4<-ggplot()+
-  geom_ribbon(data=data.frame(ggpredict(model3_MFD_h,
-                                        terms=c("temp_sire"))),
-              aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
-              fill="red",alpha=0.25)+
-  geom_line(data=data.frame(ggpredict(model3_MFD_h,
-                                      terms=c("temp_sire"))),
-            aes(x=x,y=predicted),color="red")+
-  # geom_ribbon(data=data.frame(ggpredict(model3_MFD_uh,
-  #                                       terms=c("temp_sire"))),
-  #             aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
-  #             fill="blue",alpha=0.25)+
-  # geom_line(data=data.frame(ggpredict(model3_MFD_uh,
-  #                                     terms=c("temp_sire"))),
-  #           aes(x=x,y=predicted),color="blue",linetype="dashed")+
-  geom_ribbon(data=data.frame(ggemmeans(model4_MFD,
-                                        terms=c("temp_sire"))),
-              aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
-              fill="darkgrey",alpha=0.25)+
-  geom_line(data=data.frame(ggemmeans(model4_MFD,
-                                      terms=c("temp_sire"))),
-            aes(x=x,y=predicted))+
-  geom_jitter(data=data_exp,
-              aes(x=temp_sire,y=MFD,color=treat),size=1.5,alpha=0.1)+
-  scale_color_manual(values=c("blue","red"),limits=c("unheated","heatmat"),
-                     labels=c("unheated","heated"))+
-  my_theme_legend()+xlab("Sire temperature")+ylab("Mean flowering date")+
-  theme(legend.position="top",legend.title=element_blank())
-fig4
-ggsave(file="output/figures/fig4.tiff", plot=fig4,width=4,height=5,dpi=300,
-       compression="lzw")
-```
-
 
 ### Models mid-parental values
 
@@ -1115,6 +1026,44 @@ tab_model(model4_veg,model4_FFD,model4_MFD,model4_LFD,
           file="output/tables/Table3.html")
 ```
 
+#### Figure 4
+
+```{r}
+fig4<-ggplot()+
+  geom_ribbon(data=data.frame(ggpredict(model3_MFD_h,
+                                        terms=c("temp_sire"))),
+              aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
+              fill="red",alpha=0.25)+
+  geom_line(data=data.frame(ggpredict(model3_MFD_h,
+                                      terms=c("temp_sire"))),
+            aes(x=x,y=predicted),color="red")+
+  # geom_ribbon(data=data.frame(ggpredict(model3_MFD_uh,
+  #                                       terms=c("temp_sire"))),
+  #             aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
+  #             fill="blue",alpha=0.25)+
+  # geom_line(data=data.frame(ggpredict(model3_MFD_uh,
+  #                                     terms=c("temp_sire"))),
+  #           aes(x=x,y=predicted),color="blue",linetype="dashed")+
+  geom_ribbon(data=data.frame(ggemmeans(model4_MFD,
+                                        terms=c("temp_sire"))),
+              aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
+              fill="darkgrey",alpha=0.25)+
+  geom_line(data=data.frame(ggemmeans(model4_MFD,
+                                      terms=c("temp_sire"))),
+            aes(x=x,y=predicted))+
+  geom_jitter(data=data_exp%>%
+               mutate(treat=fct_recode(treat,"control"="unheated")),
+              aes(x=temp_sire,y=MFD,color=treat),size=1.5,alpha=0.1)+
+  scale_color_manual(values=c("blue","red"),limits=c("control","heatmat"),
+                     labels=c("control","heated"))+
+  my_theme_legend()+xlab("Sire origin temperature (ºC)")+
+  ylab("Median flowering date")+
+  theme(legend.position="top",legend.title=element_blank())
+fig4
+ggsave(file="output/figures/fig4.tiff", plot=fig4,width=4,height=5,dpi=300,
+       compression="lzw")
+```
+
 ### Models mid-parental values
 
 ```{r}
@@ -1154,354 +1103,679 @@ tab_model(model4_veg_midP,model4_FFD_midP,model4_MFD_midP,model4_LFD_midP,
           file="output/tables/AppS4.html")
 ```
 
-# STANDBY: Analyses with animal models (Bayesian)
+# Prediction 3 with breeding values (elevation)
 
-Using only offspring from crosses.
+Get breeding values/BLUPs (elevation of RNs) from models in Prediction 1.
 
-Create pedigree:
+What are these breeding values? Their mean is approx. zero. They represent the difference between that genotype's predicted response and the (population-level) average predicted response. They indicate the difference in gentoype phenology relative to the population-average, so more positive values of BLUP intercept indicate that the genotype's response occurs above the population-level average, and  negative values are below the population-level average. For vegetative growth, positive values indicate that growth is higher than the population-level average, and negative values indicate that growth is lower than the population-level average. For FFD/MFD/LFD, positive values indicate that phenology is later than the population-level average, and negative values indicate that phenology is earlier than the population-level average.  
 
-```{r}
-data_ped_cross<-data.frame(unique(select(data_exp,unique_id,dam,sire)))
-```
-
-To be able to fit an animal model, brms needs the relativeness (relationship) matrix of the pedigree and not its inverse (as in other softwares). This can be estimated using the nadiv package.
-
-Create the relativeness (relationship) matrix of the pedigree:
+The population-level averages are represented by the intercepts of the models
 
 ```{r}
-Amat_cross <- as.matrix(makeA(prepPed(data_ped_cross,check=T)))
-```
-
-## Prediction 1a
-
-### Models
-
-```{r eval=FALSE, include=FALSE}
-Bmodel1a_veg_uh <- brm(
-  mean_sh_growth ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
-  data = subset(data_exp,treat=="unheated"),
-  data2 = list(Amat_cross = Amat_cross),
-  family = gaussian(),
-  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
-)
-save(Bmodel1a_veg_uh, file = "output/models/Bmodel1a_veg_uh.rda")
-# Warning messages:
-# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
-# 2: There were 376 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
-```
-
-```{r eval=FALSE, include=FALSE}
-Bmodel1a_veg_h <- brm(
-  mean_sh_growth ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
-  data = subset(data_exp,treat=="heatmat"),
-  data2 = list(Amat_cross = Amat_cross),
-  family = gaussian(),
-  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
-)
-save(Bmodel1a_veg_h, file = "output/models/Bmodel1a_veg_h.rda")
-# Warning messages:
-# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
-# 2: There were 277 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
-```
-
-```{r eval=FALSE, include=FALSE}
-Bmodel1a_FFD_uh <- brm(
-  FFD ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
-  data = subset(data_exp,treat=="unheated"),
-  data2 = list(Amat_cross = Amat_cross),
-  family = gaussian(),
-  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
-)
-save(Bmodel1a_FFD_uh, file = "output/models/Bmodel1a_FFD_uh.rda")
-# Warning messages:
-# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
-# 2: There were 484 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
-```
-
-```{r eval=FALSE, include=FALSE}
-Bmodel1a_FFD_h <- brm(
-  FFD ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
-  data = subset(data_exp,treat=="heatmat"),
-  data2 = list(Amat_cross = Amat_cross),
-  family = gaussian(),
-  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
-)
-save(Bmodel1a_FFD_h, file = "output/models/Bmodel1a_FFD_h.rda")
-# Warning messages:
-# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
-# 2: There were 570 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
-```
-
-```{r eval=FALSE, include=FALSE}
-Bmodel1a_LFD_uh <- brm(
-  LFD ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
-  data = subset(data_exp,treat=="unheated"),
-  data2 = list(Amat_cross = Amat_cross),
-  family = gaussian(),
-  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
-)
-save(Bmodel1a_LFD_uh, file = "output/models/Bmodel1a_LFD_uh.rda")
-# Warning messages:
-# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
-# 2: There were 686 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
-```
-
-```{r eval=FALSE, include=FALSE}
-Bmodel1a_LFD_h <- brm(
-  LFD ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
-  data = subset(data_exp,treat=="heatmat"),
-  data2 = list(Amat_cross = Amat_cross),
-  family = gaussian(),
-  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
-)
-save(Bmodel1a_LFD_h, file = "output/models/Bmodel1a_LFD_h.rda")
-# Warning messages:
-# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
-# 2: There were 416 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
-```
-
-# HERE: RUN
-
-```{r eval=FALSE, include=FALSE}
-Bmodel1a_date50_uh <- brm(
-  date50 ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
-  data = subset(data_exp,treat=="unheated"),
-  data2 = list(Amat_cross = Amat_cross),
-  family = gaussian(),
-  chains = 4, cores = 16, iter = 15000, warmup = 3000, thin = 5
-)
-save(Bmodel1a_date50_uh, file = "output/models/Bmodel1a_date50_uh.rda")
-# Warning messages:
-# 1: Parts of the model have not converged (some Rhats are > 1.05). Be careful when analysing the results! We recommend running more iterations and/or setting stronger priors. 
-# 2: There were 178 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
-```
-
-```{r eval=FALSE, include=FALSE}
-Bmodel1a_date50_h <- brm(
-  date50 ~ 1 + (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
-  data = subset(data_exp,treat=="heatmat"),
-  data2 = list(Amat_cross = Amat_cross),
-  family = gaussian(),
-  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
-)
-save(Bmodel1a_date50_h, file = "output/models/Bmodel1a_date50_h.rda")
-# Warning message:
-# There were 403 divergent transitions after warmup. Increasing adapt_delta above 0.8 may help. See http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup 
+averages_elev<-rbind(
+  data.frame(average=as.numeric(fixef(model1a_veg_uh)))%>%
+    mutate(name="veg_uh_elev"),
+  data.frame(average=as.numeric(fixef(model1a_veg_h)))%>%
+    mutate(name="veg_h_elev"),
+  data.frame(average=as.numeric(fixef(model1a_FFD_uh)))%>%
+    mutate(name="FFD_uh_elev"),
+  data.frame(average=as.numeric(fixef(model1a_FFD_h)))%>%
+    mutate(name="FFD_h_elev"),
+  data.frame(average=as.numeric(fixef(model1a_MFD_uh)))%>%
+    mutate(name="MFD_uh_elev"),
+  data.frame(average=as.numeric(fixef(model1a_MFD_h)))%>%
+    mutate(name="MFD_h_elev"),
+  data.frame(average=as.numeric(fixef(model1a_LFD_uh)))%>%
+    mutate(name="LFD_uh_elev"),
+  data.frame(average=as.numeric(fixef(model1a_LFD_h)))%>%
+    mutate(name="LFD_h_elev")
+  )%>%
+  separate(name,into=c("var","treat","type"))
 ```
 
 ```{r}
-load("output/models/Bmodel1a_veg_uh.rda")
-load("output/models/Bmodel1a_veg_h.rda")
-load("output/models/Bmodel1a_FFD_uh.rda")
-load("output/models/Bmodel1a_FFD_h.rda")
-load("output/models/Bmodel1a_LFD_uh.rda")
-load("output/models/Bmodel1a_LFD_h.rda")
-load("output/models/Bmodel1a_date50_uh.rda")
-load("output/models/Bmodel1a_date50_h.rda")
-summary(Bmodel1a_veg_uh)
-summary(Bmodel1a_veg_h)
-summary(Bmodel1a_FFD_uh)
-summary(Bmodel1a_FFD_h)
-summary(Bmodel1a_LFD_uh)
-summary(Bmodel1a_LFD_h)
-summary(Bmodel1a_date50_uh)
-summary(Bmodel1a_date50_h)
+breedV_elev_sires<-left_join(
+  left_join(
+    left_join(
+      left_join(
+        left_join(
+          left_join(
+            left_join(
+              ranef(model1a_veg_uh)$sire%>%rownames_to_column(var="sire")%>%
+                rename(breedV_veg_uh_elev_sire="(Intercept)"),
+              ranef(model1a_veg_h)$sire%>%rownames_to_column(var="sire")%>%
+                rename(breedV_veg_h_elev_sire="(Intercept)")),
+            ranef(model1a_FFD_uh)$sire%>%rownames_to_column(var="sire")%>%
+              rename(breedV_FFD_uh_elev_sire="(Intercept)")
+            ),
+          ranef(model1a_FFD_h)$sire%>%rownames_to_column(var="sire")%>%
+            rename(breedV_FFD_h_elev_sire="(Intercept)")
+          ),
+        ranef(model1a_MFD_uh)$sire%>%rownames_to_column(var="sire")%>%
+          rename(breedV_MFD_uh_elev_sire="(Intercept)")
+        ),
+      ranef(model1a_MFD_h)$sire%>%rownames_to_column(var="sire")%>%
+        rename(breedV_MFD_h_elev_sire="(Intercept)")
+      ),
+    ranef(model1a_LFD_uh)$sire%>%rownames_to_column(var="sire")%>%
+      rename(breedV_LFD_uh_elev_sire="(Intercept)")
+    ),
+  ranef(model1a_LFD_h)$sire%>%rownames_to_column(var="sire")%>%
+    rename(breedV_LFD_h_elev_sire="(Intercept)")
+  )%>%
+  pivot_longer(cols=breedV_veg_uh_elev_sire:breedV_LFD_h_elev_sire,
+               names_to=c("remove","var","treat","type","comp"),names_sep="_",
+               values_to="breedV")%>%
+  dplyr::select(-remove)%>%
+  left_join(averages_elev)%>%mutate(breedV_av=breedV+average)
+# Add BLUP intercept estimates to the population-level average
 ```
 
+```{r}
+breedV_elev_dams<-left_join(
+  left_join(
+    left_join(
+      left_join(
+        left_join(
+          left_join(
+            left_join(
+              ranef(model1a_veg_uh)$dam%>%rownames_to_column(var="dam")%>%
+                rename(breedV_veg_uh_elev_dam="(Intercept)"),
+              ranef(model1a_veg_h)$dam%>%rownames_to_column(var="dam")%>%
+                rename(breedV_veg_h_elev_dam="(Intercept)")),
+            ranef(model1a_FFD_uh)$dam%>%rownames_to_column(var="dam")%>%
+              rename(breedV_FFD_uh_elev_dam="(Intercept)")
+            ),
+          ranef(model1a_FFD_h)$dam%>%rownames_to_column(var="dam")%>%
+            rename(breedV_FFD_h_elev_dam="(Intercept)")
+          ),
+        ranef(model1a_MFD_uh)$dam%>%rownames_to_column(var="dam")%>%
+          rename(breedV_MFD_uh_elev_dam="(Intercept)")
+        ),
+      ranef(model1a_MFD_h)$dam%>%rownames_to_column(var="dam")%>%
+        rename(breedV_MFD_h_elev_dam="(Intercept)")
+      ),
+    ranef(model1a_LFD_uh)$dam%>%rownames_to_column(var="dam")%>%
+      rename(breedV_LFD_uh_elev_dam="(Intercept)")
+    ),
+  ranef(model1a_LFD_h)$dam%>%rownames_to_column(var="dam")%>%
+    rename(breedV_LFD_h_elev_dam="(Intercept)")
+  )%>%
+  pivot_longer(cols=breedV_veg_uh_elev_dam:breedV_LFD_h_elev_dam,
+               names_to=c("remove","var","treat","type","comp"),names_sep="_",
+               values_to="breedV")%>%
+  dplyr::select(-remove)%>%
+  left_join(averages_elev)%>%mutate(breedV_av=breedV+average)
+# Add BLUP intercept estimates to the population-level average
+```
 
-### Proportions of variance
+Plot BLUPs for sires for the elevation
 
 ```{r}
-varcomps_Bmodel1a_veg_uh <- tibble(
-  beta0 = posterior_samples(Bmodel1a_veg_uh,pars="b_Intercept")[,1],
-  VI = (VarCorr(Bmodel1a_veg_uh,summary=F)$unique_id$sd[,"Intercept"])^2,
-  VM = (VarCorr(Bmodel1a_veg_uh,summary=F)$dam$sd[,"Intercept"])^2,
-  VR=(posterior_samples(Bmodel1a_veg_uh,pars="sigma")[,1])^2
-  ) %>% 
-  mutate(VP = select(.,c(VI,VM,VR)) %>% rowSums()) %>% 
-  mutate(.iteration = 1) %>% mutate(.iteration = cumsum(.iteration))
+ggplot(breedV_elev_sires, aes(sire, breedV))+
+  geom_point(aes(group = sire, colour = sire), size = 4) +
+  ylab("BLUP elevation")+
+  geom_hline(yintercept = 0, lty = 2) + 
+  facet_grid(rows=vars(var),cols=vars(treat))+
+  theme(legend.position="none")
+```
+
+Plot BLUPs for dams for the elevation
+
+```{r}
+ggplot(breedV_elev_dams, aes(dam, breedV))+
+geom_point(aes(group = dam, colour = dam), size = 4) +
+  ylab("BLUP elevation")+
+  geom_hline(yintercept = 0, lty = 2) + 
+  facet_grid(rows=vars(var),cols=vars(treat))+
+  theme(legend.position="none")
+```
+
+Plot BLUPs for sires + population level averages for the elevation
+
+```{r}
+ggplot()+
+  geom_line(data=breedV_elev_sires%>%filter(var=="veg"),
+            aes(x=treat,y=breedV_av,color=sire,group=sire),size=1,alpha=0.5)+
+  geom_point(data=breedV_elev_sires%>%filter(var=="veg"),
+             aes(x=treat,y=breedV_av,color=sire,group=sire),size=5,alpha=0.5)+
+  geom_point(data=breedV_elev_sires%>%filter(var=="veg"),
+             aes(x=treat,y=average,group=sire),
+             color="black",size=5,shape=15)+
+  geom_line(data=breedV_elev_sires%>%filter(var=="veg"),
+            aes(x=treat,y=average,group=sire),
+            color="black",size=1,linetype="dashed")+
+  ylab("BLUP elevation + population-level average")+ggtitle("veg")
+ggplot()+
+  geom_line(data=breedV_elev_sires%>%filter(var=="FFD"),
+            aes(x=treat,y=breedV_av,color=sire,group=sire),size=1,alpha=0.5)+
+  geom_point(data=breedV_elev_sires%>%filter(var=="FFD"),
+             aes(x=treat,y=breedV_av,color=sire,group=sire),size=5,alpha=0.5)+
+  geom_point(data=breedV_elev_sires%>%filter(var=="FFD"),
+             aes(x=treat,y=average,group=sire),
+             color="black",size=5,shape=15)+
+  geom_line(data=breedV_elev_sires%>%filter(var=="FFD"),
+            aes(x=treat,y=average,group=sire),
+            color="black",size=1,linetype="dashed")+
+  ylab("BLUP elevation + population-level average")+ggtitle("FFD")
+ggplot()+
+  geom_line(data=breedV_elev_sires%>%filter(var=="MFD"),
+            aes(x=treat,y=breedV_av,color=sire,group=sire),size=1,alpha=0.5)+
+  geom_point(data=breedV_elev_sires%>%filter(var=="MFD"),
+             aes(x=treat,y=breedV_av,color=sire,group=sire),size=5,alpha=0.5)+
+  geom_point(data=breedV_elev_sires%>%filter(var=="MFD"),
+             aes(x=treat,y=average,group=sire),
+             color="black",size=5,shape=15)+
+  geom_line(data=breedV_elev_sires%>%filter(var=="MFD"),
+            aes(x=treat,y=average,group=sire),
+            color="black",size=1,linetype="dashed")+
+  ylab("BLUP elevation + population-level average")+ggtitle("MFD")
+ggplot()+
+  geom_line(data=breedV_elev_sires%>%filter(var=="LFD"),
+            aes(x=treat,y=breedV_av,color=sire,group=sire),size=1,alpha=0.5)+
+  geom_point(data=breedV_elev_sires%>%filter(var=="LFD"),
+             aes(x=treat,y=breedV_av,color=sire,group=sire),size=5,alpha=0.5)+
+  geom_point(data=breedV_elev_sires%>%filter(var=="LFD"),
+             aes(x=treat,y=average,group=sire),
+             color="black",size=5,shape=15)+
+  geom_line(data=breedV_elev_sires%>%filter(var=="LFD"),
+            aes(x=treat,y=average,group=sire),
+            color="black",size=1,linetype="dashed")+
+  ylab("BLUP elevation + population-level average")+ggtitle("LFD")
+```
+
+Plot BLUPs for dams + population level averages for the elevation
+
+```{r}
+ggplot()+
+  geom_line(data=breedV_elev_dams%>%filter(var=="veg"),
+            aes(x=treat,y=breedV_av,color=dam,group=dam),size=1,alpha=0.5)+
+  geom_point(data=breedV_elev_dams%>%filter(var=="veg"),
+             aes(x=treat,y=breedV_av,color=dam,group=dam),size=5,alpha=0.5)+
+  geom_point(data=breedV_elev_dams%>%filter(var=="veg"),
+             aes(x=treat,y=average,group=dam),
+             color="black",size=5,shape=15)+
+  geom_line(data=breedV_elev_dams%>%filter(var=="veg"),
+            aes(x=treat,y=average,group=dam),
+            color="black",size=1,linetype="dashed")+
+  ylab("BLUP elevation - population-level average")+ggtitle("veg")
+ggplot()+
+  geom_line(data=breedV_elev_dams%>%filter(var=="FFD"),
+            aes(x=treat,y=breedV_av,color=dam,group=dam),size=1,alpha=0.5)+
+  geom_point(data=breedV_elev_dams%>%filter(var=="FFD"),
+             aes(x=treat,y=breedV_av,color=dam,group=dam),size=5,alpha=0.5)+
+  geom_point(data=breedV_elev_dams%>%filter(var=="FFD"),
+             aes(x=treat,y=average,group=dam),
+             color="black",size=5,shape=15)+
+  geom_line(data=breedV_elev_dams%>%filter(var=="FFD"),
+            aes(x=treat,y=average,group=dam),
+            color="black",size=1,linetype="dashed")+
+  ylab("BLUP elevation - population-level average")+ggtitle("FFD")
+ggplot()+
+  geom_line(data=breedV_elev_dams%>%filter(var=="MFD"),
+            aes(x=treat,y=breedV_av,color=dam,group=dam),size=1,alpha=0.5)+
+  geom_point(data=breedV_elev_dams%>%filter(var=="MFD"),
+             aes(x=treat,y=breedV_av,color=dam,group=dam),size=5,alpha=0.5)+
+  geom_point(data=breedV_elev_dams%>%filter(var=="MFD"),
+             aes(x=treat,y=average,group=dam),
+             color="black",size=5,shape=15)+
+  geom_line(data=breedV_elev_dams%>%filter(var=="MFD"),
+            aes(x=treat,y=average,group=dam),
+            color="black",size=1,linetype="dashed")+
+  ylab("BLUP elevation - population-level average")+ggtitle("MFD")
+ggplot()+
+  geom_line(data=breedV_elev_dams%>%filter(var=="LFD"),
+            aes(x=treat,y=breedV_av,color=dam,group=dam),size=1,alpha=0.5)+
+  geom_point(data=breedV_elev_dams%>%filter(var=="LFD"),
+             aes(x=treat,y=breedV_av,color=dam,group=dam),size=5,alpha=0.5)+
+  geom_point(data=breedV_elev_dams%>%filter(var=="LFD"),
+             aes(x=treat,y=average,group=dam),
+             color="black",size=5,shape=15)+
+  geom_line(data=breedV_elev_dams%>%filter(var=="LFD"),
+            aes(x=treat,y=average,group=dam),
+            color="black",size=1,linetype="dashed")+
+  ylab("BLUP elevation - population-level average")+ggtitle("LFD")
+```
+
+Add origin temperatures:
+
+```{r}
+breedV_elev_sires<-breedV_elev_sires%>%
+  left_join(data_exp%>%dplyr::select(sire,temp_sire)%>%unique())
+breedV_elev_dams<-breedV_elev_dams%>%
+  left_join(data_exp%>%dplyr::select(dam,temp_dam)%>%unique())
+```
+
+## Sire breeding values ~ origin temperatures
+
+```{r}
+mod_bV_elev_temp_sire_veg_uh<-lm(breedV~temp_sire,
+                                 subset(breedV_elev_sires,
+                                        var=="veg"&treat=="uh"))
+mod_bV_elev_temp_sire_veg_h<-lm(breedV~temp_sire,
+                                 subset(breedV_elev_sires,
+                                        var=="veg"&treat=="h"))
+mod_bV_elev_temp_sire_FFD_uh<-lm(breedV~temp_sire,
+                                 subset(breedV_elev_sires,
+                                        var=="FFD"&treat=="uh"))
+mod_bV_elev_temp_sire_FFD_h<-lm(breedV~temp_sire,
+                                 subset(breedV_elev_sires,
+                                        var=="FFD"&treat=="h"))
+mod_bV_elev_temp_sire_MFD_uh<-lm(breedV~temp_sire,
+                                 subset(breedV_elev_sires,
+                                        var=="MFD"&treat=="uh"))
+mod_bV_elev_temp_sire_MFD_h<-lm(breedV~temp_sire,
+                                 subset(breedV_elev_sires,
+                                        var=="MFD"&treat=="h"))
+mod_bV_elev_temp_sire_LFD_uh<-lm(breedV~temp_sire,
+                                 subset(breedV_elev_sires,
+                                        var=="LFD"&treat=="uh"))
+mod_bV_elev_temp_sire_LFD_h<-lm(breedV~temp_sire,
+                                 subset(breedV_elev_sires,
+                                        var=="LFD"&treat=="h"))
 ```
 
 ```{r}
-varcomps_Bmodel1a_veg_uh %>% 
-  pivot_longer(cols=c(VI:VR),names_to = "varcomp" , values_to = "variance") %>% 
-  mutate(varcomp=fct_relevel(varcomp,c("VR","VI","VM"))) %>% 
+summary(mod_bV_elev_temp_sire_veg_uh)
+summary(mod_bV_elev_temp_sire_veg_h)
+summary(mod_bV_elev_temp_sire_FFD_uh)
+summary(mod_bV_elev_temp_sire_FFD_h)
+summary(mod_bV_elev_temp_sire_MFD_uh)
+summary(mod_bV_elev_temp_sire_MFD_h) #*
+summary(mod_bV_elev_temp_sire_LFD_uh)
+summary(mod_bV_elev_temp_sire_LFD_h)
+```
+
+### Plots
+
+```{r}
+ggplot(breedV_elev_sires,aes(x=temp_sire,y=breedV_av))+
+  geom_point()+geom_smooth(method="lm")+
+  facet_grid2(var~treat,scales="free",independent="all")+
+  xlab("Sire origin temperature")+
+  ylab("Sire breeding value for elevation + population-level average")
+```
+
+#### Figure S1A
+
+Only significant relationship between sire breeding value for elevation and origin temperature occurs for MFD in the heated treatment (agrees with what we found before!)
+
+```{r}
+figS1A<-plot(ggpredict(mod_bV_elev_temp_sire_MFD_h,terms="temp_sire"),add.data=T)+
+  xlab("Sire origin temperature (ºC)")+
+  ylab("Sire breeding value\nfor elevation")+
+  my_theme()+ggtitle(NULL)
+figS1A
+ggsave(file="output/figures/figS1A.tiff", plot=figS1A,width=5,height=4,dpi=300,
+       compression="lzw")
+```
+
+## Dam breeding values ~ origin temperatures
+
+```{r}
+mod_bV_elev_temp_dam_veg_uh<-lm(breedV~temp_dam,
+                                 subset(breedV_elev_dams,
+                                        var=="veg"&treat=="uh"))
+mod_bV_elev_temp_dam_veg_h<-lm(breedV~temp_dam,
+                                 subset(breedV_elev_dams,
+                                        var=="veg"&treat=="h"))
+mod_bV_elev_temp_dam_FFD_uh<-lm(breedV~temp_dam,
+                                 subset(breedV_elev_dams,
+                                        var=="FFD"&treat=="uh"))
+mod_bV_elev_temp_dam_FFD_h<-lm(breedV~temp_dam,
+                                 subset(breedV_elev_dams,
+                                        var=="FFD"&treat=="h"))
+mod_bV_elev_temp_dam_MFD_uh<-lm(breedV~temp_dam,
+                                 subset(breedV_elev_dams,
+                                        var=="MFD"&treat=="uh"))
+mod_bV_elev_temp_dam_MFD_h<-lm(breedV~temp_dam,
+                                 subset(breedV_elev_dams,
+                                        var=="MFD"&treat=="h"))
+mod_bV_elev_temp_dam_LFD_uh<-lm(breedV~temp_dam,
+                                 subset(breedV_elev_dams,
+                                        var=="LFD"&treat=="uh"))
+mod_bV_elev_temp_dam_LFD_h<-lm(breedV~temp_dam,
+                                 subset(breedV_elev_dams,
+                                        var=="LFD"&treat=="h"))
+```
+
+```{r}
+summary(mod_bV_elev_temp_dam_veg_uh)
+summary(mod_bV_elev_temp_dam_veg_h)
+summary(mod_bV_elev_temp_dam_FFD_uh)
+summary(mod_bV_elev_temp_dam_FFD_h)
+summary(mod_bV_elev_temp_dam_MFD_uh)
+summary(mod_bV_elev_temp_dam_MFD_h)
+summary(mod_bV_elev_temp_dam_LFD_uh)
+summary(mod_bV_elev_temp_dam_LFD_h)
+# All NS
+```
+
+### Plots
+
+```{r}
+ggplot(breedV_elev_dams,aes(x=temp_dam,y=breedV_av))+
+  geom_point()+geom_smooth(method="lm")+
+  facet_grid2(var~treat,scales="free",independent="all")+
+  xlab("Dam origin temperature")+
+  ylab("Dam breeding value for elevation + population-level average")
+```
+
+# Prediction 4 with breeding values (slope)
+
+Get breeding values/BLUPs (slope of RNs) from models in Prediction 2.
+
+What are these breeding values? Their mean is approx. zero. They represent the difference in slope (relative steepness of change) between the population-level average response and the response of the individual genotype. They indicate the difference in steepness of change in phenology relative to the population-average steepness. In this case, the difference in phenology between the heated and unheated treatment relative to the population-average difference. So more positive values of BLUP slope indicate that the genotype's difference is larger than the population-level average difference, and more negative values of BLUP slope indicate that the genotype's difference is smaller than the population-level average difference. 
+
+The population-level average differences are represented by the fixed effects of treatment in the models
+
+```{r}
+averages_slope<-rbind(
+  data.frame(ggpredict(model1b_veg))[1:2]%>%
+    pivot_wider(names_from=treat.x,values_from=treat.predicted)%>%
+    mutate(slope=heatmat-unheated,name="veg_slope"), # slope = heated - unheated
+  data.frame(ggpredict(model1b_FFD))[1:2]%>%
+    pivot_wider(names_from=treat.x,values_from=treat.predicted)%>%
+    mutate(slope=heatmat-unheated,name="FFD_slope"),
+  data.frame(ggpredict(model1b_MFD))[1:2]%>%
+    pivot_wider(names_from=treat.x,values_from=treat.predicted)%>%
+    mutate(slope=heatmat-unheated,name="MFD_slope"),
+  data.frame(ggpredict(model1b_LFD))[1:2]%>%
+    pivot_wider(names_from=treat.x,values_from=treat.predicted)%>%
+    mutate(slope=heatmat-unheated,name="LFD_slope")
+  )%>%
+  separate(name,into=c("var","type"))%>%
+  rename(average=slope,av_heatmat=heatmat,av_unheated=unheated)%>%
+  dplyr::select(var,type,average,av_heatmat,av_unheated)
+```
+
+```{r}
+breedV_slope_sires<-left_join(
+  left_join(
+    left_join(
+      ranef(model1b_veg)$`treat:sire`%>%
+        rownames_to_column(var="treat_sire")%>%
+        rename(breedV_veg_slope_sire="(Intercept)")%>%
+        separate(treat_sire,into=c("treat","sire"))%>%
+        pivot_wider(names_from="treat",
+                    values_from="breedV_veg_slope_sire",
+                    names_prefix="breedV_veg_slope_sire_"),
+      ranef(model1b_FFD)$`treat:sire`%>%
+        rownames_to_column(var="treat_sire")%>%
+        rename(breedV_FFD_slope_sire="(Intercept)")%>%
+        separate(treat_sire,into=c("treat","sire"))%>%
+        pivot_wider(names_from="treat",
+                    values_from="breedV_FFD_slope_sire",
+                    names_prefix="breedV_FFD_slope_sire_")
+      ),
+    ranef(model1b_MFD)$`treat:sire`%>%
+      rownames_to_column(var="treat_sire")%>%
+      rename(breedV_MFD_slope_sire="(Intercept)")%>%
+      separate(treat_sire,into=c("treat","sire"))%>%
+      pivot_wider(names_from="treat",
+                  values_from="breedV_MFD_slope_sire",
+                  names_prefix="breedV_MFD_slope_sire_")
+    ),
+  ranef(model1b_LFD)$`treat:sire`%>%
+    rownames_to_column(var="treat_sire")%>%
+    rename(breedV_LFD_slope_sire="(Intercept)")%>%
+    separate(treat_sire,into=c("treat","sire"))%>%
+    pivot_wider(names_from="treat",
+                values_from="breedV_LFD_slope_sire",
+                names_prefix="breedV_LFD_slope_sire_")
+  )%>%
+  pivot_longer(cols=breedV_veg_slope_sire_heatmat:breedV_LFD_slope_sire_unheated,
+               names_to=c("remove","var","type","comp","treat"),names_sep="_",
+               values_to="breedV")%>%
+  dplyr::select(-remove)%>%
+  pivot_wider(names_from="treat",values_from="breedV",names_prefix="breedV_")%>%
+  mutate(breedV=breedV_heatmat-breedV_unheated)%>% # Difference heated-unheated
+  left_join(averages_slope)%>%mutate(breedV_av=average+breedV)
+# Add BLUP slope estimates to the population-level average
+```
+
+```{r}
+breedV_slope_dams<-left_join(
+  left_join(
+    left_join(
+      ranef(model1b_veg)$`treat:dam`%>%
+        rownames_to_column(var="treat_dam")%>%
+        rename(breedV_veg_slope_dam="(Intercept)")%>%
+        separate(treat_dam,into=c("treat","dam"))%>%
+        pivot_wider(names_from="treat",
+                    values_from="breedV_veg_slope_dam",
+                    names_prefix="breedV_veg_slope_dam_"),
+      ranef(model1b_FFD)$`treat:dam`%>%
+        rownames_to_column(var="treat_dam")%>%
+        rename(breedV_FFD_slope_dam="(Intercept)")%>%
+        separate(treat_dam,into=c("treat","dam"))%>%
+        pivot_wider(names_from="treat",
+                    values_from="breedV_FFD_slope_dam",
+                    names_prefix="breedV_FFD_slope_dam_")
+      ),
+    ranef(model1b_MFD)$`treat:dam`%>%
+      rownames_to_column(var="treat_dam")%>%
+      rename(breedV_MFD_slope_dam="(Intercept)")%>%
+      separate(treat_dam,into=c("treat","dam"))%>%
+      pivot_wider(names_from="treat",
+                  values_from="breedV_MFD_slope_dam",
+                  names_prefix="breedV_MFD_slope_dam_")
+    ),
+  ranef(model1b_LFD)$`treat:dam`%>%
+    rownames_to_column(var="treat_dam")%>%
+    rename(breedV_LFD_slope_dam="(Intercept)")%>%
+    separate(treat_dam,into=c("treat","dam"))%>%
+    pivot_wider(names_from="treat",
+                values_from="breedV_LFD_slope_dam",
+                names_prefix="breedV_LFD_slope_dam_")
+  )%>%
+  pivot_longer(cols=breedV_veg_slope_dam_heatmat:breedV_LFD_slope_dam_unheated,
+               names_to=c("remove","var","type","comp","treat"),names_sep="_",
+               values_to="breedV")%>%
+  dplyr::select(-remove)%>%
+  pivot_wider(names_from="treat",values_from="breedV",names_prefix="breedV_")%>%
+  mutate(breedV=breedV_heatmat-breedV_unheated)%>% # Difference heated-unheated
+  left_join(averages_slope)%>%mutate(breedV_av=average+breedV)
+# Add BLUP slope estimates to the population-level average
+```
+
+Plot BLUPs for sires for the elevation
+
+```{r}
+ggplot(breedV_slope_sires, aes(sire, breedV))+
+geom_point(aes(group = sire, colour = sire), size = 4) +
+  ylab("BLUP slope")+
+  geom_hline(yintercept = 0, lty = 2) + 
+  facet_wrap(~var)+
+  theme(legend.position="none")
+```
+
+Plot BLUPs for dams for the elevation
+
+```{r}
+ggplot(breedV_slope_dams, aes(dam, breedV))+
+geom_point(aes(group = dam, colour = dam), size = 4) +
+  ylab("BLUP slope")+
+  geom_hline(yintercept = 0, lty = 2) + 
+  facet_wrap(~var)+
+  theme(legend.position="none")
+```
+
+Plot BLUPs for sires + population level averages for the slope
+
+```{r}
+breedV_slope_sires%>%
+  dplyr::select(sire,var,breedV_heatmat,breedV_unheated,av_heatmat,av_unheated)%>%
+  pivot_longer(cols=breedV_heatmat:av_unheated,names_to="treat",values_to="values")%>%
+  separate(treat,into=c("type","treat"))%>%
+  pivot_wider(names_from="type",values_from="values")%>%
+  filter(var=="veg")%>%
   ggplot()+
-  stat_halfeye(aes(y=varcomp,x=100*variance/VP),
-                point_interval = mean_hdi,.width = 0.001,
-                normalize="xy")+
-  scale_x_continuous(name="Variance explained (%)",
-                     lim=c(0,100),breaks=seq(from=0,to=100,by=10))+
-  scale_y_discrete(name="Variance component",
-                   labels=c(expression(italic(V[Residual])),
-                            expression(italic(V[Individual])),
-                            expression(italic(V[dam]))
-                            ))+
-  my_theme()+
-  background_grid(colour.major = "grey95",colour.minor = "grey95")+
-  ggtitle("Partitioning of total phenotypic variation for Vegetative phenology\nUH treatment")+
-  labs(caption = expression(paste("Total phenotypic variance =",
-                                  italic(V[dam]),
-                           " + ", italic(V[Individual]),
-                           " + ", italic(V[Residual])
-                           )))
-```
-
-[...]
-
-```{r}
-varcomps_Bmodel1a_date50_uh <- tibble(
-  beta0 = posterior_samples(Bmodel1a_date50_uh,pars="b_Intercept")[,1],
-  VI = (VarCorr(Bmodel1a_date50_uh,summary=F)$unique_id$sd[,"Intercept"])^2,
-  VM = (VarCorr(Bmodel1a_date50_uh,summary=F)$dam$sd[,"Intercept"])^2,
-  VR=(posterior_samples(Bmodel1a_date50_uh,pars="sigma")[,1])^2
-  ) %>% 
-  mutate(VP = select(.,c(VI,VM,VR)) %>% rowSums()) %>% 
-  mutate(.iteration = 1) %>% mutate(.iteration = cumsum(.iteration))
-```
-
-```{r}
-varcomps_Bmodel1a_date50_uh %>% 
-  pivot_longer(cols=c(VI:VR),names_to = "varcomp" , values_to = "variance") %>% 
-  mutate(varcomp=fct_relevel(varcomp,c("VR","VI","VM"))) %>% 
+  geom_line(aes(x=treat,y=breedV+av,color=sire,group=sire),size=1,alpha=0.5)+
+  geom_point(aes(x=treat,y=breedV+av,color=sire,group=sire),size=5,alpha=0.5)+
+  geom_point(aes(x=treat,y=av,group=sire),color="black",size=5,shape=15)+
+  geom_line(aes(x=treat,y=av,group=sire),color="black",size=1,linetype="dashed")+
+  ylab("BLUP slope + population-level average")+ggtitle("veg")
+breedV_slope_sires%>%
+  dplyr::select(sire,var,breedV_heatmat,breedV_unheated,av_heatmat,av_unheated)%>%
+  pivot_longer(cols=breedV_heatmat:av_unheated,names_to="treat",values_to="values")%>%
+  separate(treat,into=c("type","treat"))%>%
+  pivot_wider(names_from="type",values_from="values")%>%
+  filter(var=="FFD")%>%
   ggplot()+
-  stat_halfeye(aes(y=varcomp,x=100*variance/VP),
-                point_interval = mean_hdi,.width = 0.001,
-                normalize="xy")+
-  scale_x_continuous(name="Variance explained (%)",
-                     lim=c(0,100),breaks=seq(from=0,to=100,by=10))+
-  scale_y_discrete(name="Variance component",
-                   labels=c(expression(italic(V[Residual])),
-                            expression(italic(V[Individual])),
-                            expression(italic(V[dam]))
-                            ))+
-  my_theme()+
-  background_grid(colour.major = "grey95",colour.minor = "grey95")+
-  ggtitle("Partitioning of total phenotypic variation for date50\nUH treatment")+
-  labs(caption = expression(paste("Total phenotypic variance =",
-                                  italic(V[dam]),
-                           " + ", italic(V[Individual]),
-                           " + ", italic(V[Residual])
-                           )))
-```
-
-```{r}
-varcomps_Bmodel1a_date50_h <- tibble(
-  beta0 = posterior_samples(Bmodel1a_date50_h,pars="b_Intercept")[,1],
-  VI = (VarCorr(Bmodel1a_date50_h,summary=F)$unique_id$sd[,"Intercept"])^2,
-  VM = (VarCorr(Bmodel1a_date50_h,summary=F)$dam$sd[,"Intercept"])^2,
-  VR=(posterior_samples(Bmodel1a_date50_h,pars="sigma")[,1])^2
-  ) %>% 
-  mutate(VP = select(.,c(VI,VM,VR)) %>% rowSums()) %>% 
-  mutate(.iteration = 1) %>% mutate(.iteration = cumsum(.iteration))
-```
-
-```{r}
-varcomps_Bmodel1a_date50_h %>% 
-  pivot_longer(cols=c(VI:VR),names_to = "varcomp" , values_to = "variance") %>% 
-  mutate(varcomp=fct_relevel(varcomp,c("VR","VI","VM"))) %>% 
+  geom_line(aes(x=treat,y=breedV+av,color=sire,group=sire),size=1,alpha=0.5)+
+  geom_point(aes(x=treat,y=breedV+av,color=sire,group=sire),size=5,alpha=0.5)+
+  geom_point(aes(x=treat,y=av,group=sire),color="black",size=5,shape=15)+
+  geom_line(aes(x=treat,y=av,group=sire),color="black",size=1,linetype="dashed")+
+  ylab("BLUP slope + population-level average")+ggtitle("FFD")
+breedV_slope_sires%>%
+  dplyr::select(sire,var,breedV_heatmat,breedV_unheated,av_heatmat,av_unheated)%>%
+  pivot_longer(cols=breedV_heatmat:av_unheated,names_to="treat",values_to="values")%>%
+  separate(treat,into=c("type","treat"))%>%
+  pivot_wider(names_from="type",values_from="values")%>%
+  filter(var=="MFD")%>%
   ggplot()+
-  stat_halfeye(aes(y=varcomp,x=100*variance/VP),
-                point_interval = mean_hdi,.width = 0.001,
-                normalize="xy")+
-  scale_x_continuous(name="Variance explained (%)",
-                     lim=c(0,100),breaks=seq(from=0,to=100,by=10))+
-  scale_y_discrete(name="Variance component",
-                   labels=c(expression(italic(V[Residual])),
-                            expression(italic(V[Individual])),
-                            expression(italic(V[dam]))
-                            ))+
-  my_theme()+
-  background_grid(colour.major = "grey95",colour.minor = "grey95")+
-  ggtitle("Partitioning of total phenotypic variation for date50\nH treatment")+
-  labs(caption = expression(paste("Total phenotypic variance =",
-                                  italic(V[dam]),
-                           " + ", italic(V[Individual]),
-                           " + ", italic(V[Residual])
-                           )))
+  geom_line(aes(x=treat,y=breedV+av,color=sire,group=sire),size=1,alpha=0.5)+
+  geom_point(aes(x=treat,y=breedV+av,color=sire,group=sire),size=5,alpha=0.5)+
+  geom_point(aes(x=treat,y=av,group=sire),color="black",size=5,shape=15)+
+  geom_line(aes(x=treat,y=av,group=sire),color="black",size=1,linetype="dashed")+
+  ylab("BLUP slope + population-level average")+ggtitle("MFD")
+breedV_slope_sires%>%
+  dplyr::select(sire,var,breedV_heatmat,breedV_unheated,av_heatmat,av_unheated)%>%
+  pivot_longer(cols=breedV_heatmat:av_unheated,names_to="treat",values_to="values")%>%
+  separate(treat,into=c("type","treat"))%>%
+  pivot_wider(names_from="type",values_from="values")%>%
+  filter(var=="LFD")%>%
+  ggplot()+
+  geom_line(aes(x=treat,y=breedV+av,color=sire,group=sire),size=1,alpha=0.5)+
+  geom_point(aes(x=treat,y=breedV+av,color=sire,group=sire),size=5,alpha=0.5)+
+  geom_point(aes(x=treat,y=av,group=sire),color="black",size=5,shape=15)+
+  geom_line(aes(x=treat,y=av,group=sire),color="black",size=1,linetype="dashed")+
+  ylab("BLUP slope + population-level average")+ggtitle("LFD")
 ```
 
-### Heritability and maternal effects
+Plot BLUPs for dams + population level averages for the slope
 
 ```{r}
-v_animal_Bmodel1a_veg_uh<-(VarCorr(Bmodel1a_veg_uh,
-                                        summary=FALSE)$unique_id$sd)^2
-v_dam_Bmodel1a_veg_uh<-(VarCorr(Bmodel1a_veg_uh,
-                                      summary=FALSE)$dam$sd)^2
-v_res_Bmodel1a_veg_uh<-(VarCorr(Bmodel1a_veg_uh,
-                                   summary=FALSE)$residual$sd)^2
-h_Bmodel1a_veg_uh<-as.mcmc(v_animal_Bmodel1a_veg_uh/
-                                  (v_animal_Bmodel1a_veg_uh+
-                                     v_dam_Bmodel1a_veg_uh+
-                                     v_res_Bmodel1a_veg_uh))
-m_Bmodel1a_veg_uh<-as.mcmc(v_dam_Bmodel1a_veg_uh/
-                             (v_animal_Bmodel1a_veg_uh+
-                                v_dam_Bmodel1a_veg_uh+
-                                v_res_Bmodel1a_veg_uh))
-summary(h_Bmodel1a_veg_uh)
-summary(m_Bmodel1a_veg_uh)
-plot(h_Bmodel1a_veg_uh)
-plot(m_Bmodel1a_veg_uh)
+breedV_slope_dams%>%
+  dplyr::select(dam,var,breedV_heatmat,breedV_unheated,av_heatmat,av_unheated)%>%
+  pivot_longer(cols=breedV_heatmat:av_unheated,names_to="treat",values_to="values")%>%
+  separate(treat,into=c("type","treat"))%>%
+  pivot_wider(names_from="type",values_from="values")%>%
+  filter(var=="veg")%>%
+  ggplot()+
+  geom_line(aes(x=treat,y=breedV+av,color=dam,group=dam),size=1,alpha=0.5)+
+  geom_point(aes(x=treat,y=breedV+av,color=dam,group=dam),size=5,alpha=0.5)+
+  geom_point(aes(x=treat,y=av,group=dam),color="black",size=5,shape=15)+
+  geom_line(aes(x=treat,y=av,group=dam),color="black",size=1,linetype="dashed")+
+  ylab("BLUP slope + population-level average")+ggtitle("veg")
+breedV_slope_dams%>%
+  dplyr::select(dam,var,breedV_heatmat,breedV_unheated,av_heatmat,av_unheated)%>%
+  pivot_longer(cols=breedV_heatmat:av_unheated,names_to="treat",values_to="values")%>%
+  separate(treat,into=c("type","treat"))%>%
+  pivot_wider(names_from="type",values_from="values")%>%
+  filter(var=="FFD")%>%
+  ggplot()+
+  geom_line(aes(x=treat,y=breedV+av,color=dam,group=dam),size=1,alpha=0.5)+
+  geom_point(aes(x=treat,y=breedV+av,color=dam,group=dam),size=5,alpha=0.5)+
+  geom_point(aes(x=treat,y=av,group=dam),color="black",size=5,shape=15)+
+  geom_line(aes(x=treat,y=av,group=dam),color="black",size=1,linetype="dashed")+
+  ylab("BLUP slope + population-level average")+ggtitle("FFD")
+breedV_slope_dams%>%
+  dplyr::select(dam,var,breedV_heatmat,breedV_unheated,av_heatmat,av_unheated)%>%
+  pivot_longer(cols=breedV_heatmat:av_unheated,names_to="treat",values_to="values")%>%
+  separate(treat,into=c("type","treat"))%>%
+  pivot_wider(names_from="type",values_from="values")%>%
+  filter(var=="MFD")%>%
+  ggplot()+
+  geom_line(aes(x=treat,y=breedV+av,color=dam,group=dam),size=1,alpha=0.5)+
+  geom_point(aes(x=treat,y=breedV+av,color=dam,group=dam),size=5,alpha=0.5)+
+  geom_point(aes(x=treat,y=av,group=dam),color="black",size=5,shape=15)+
+  geom_line(aes(x=treat,y=av,group=dam),color="black",size=1,linetype="dashed")+
+  ylab("BLUP slope + population-level average")+ggtitle("MFD")
+breedV_slope_dams%>%
+  dplyr::select(dam,var,breedV_heatmat,breedV_unheated,av_heatmat,av_unheated)%>%
+  pivot_longer(cols=breedV_heatmat:av_unheated,names_to="treat",values_to="values")%>%
+  separate(treat,into=c("type","treat"))%>%
+  pivot_wider(names_from="type",values_from="values")%>%
+  filter(var=="LFD")%>%
+  ggplot()+
+  geom_line(aes(x=treat,y=breedV+av,color=dam,group=dam),size=1,alpha=0.5)+
+  geom_point(aes(x=treat,y=breedV+av,color=dam,group=dam),size=5,alpha=0.5)+
+  geom_point(aes(x=treat,y=av,group=dam),color="black",size=5,shape=15)+
+  geom_line(aes(x=treat,y=av,group=dam),color="black",size=1,linetype="dashed")+
+  ylab("BLUP slope + population-level average")+ggtitle("LFD")
 ```
 
-[...]
+Add origin temperatures:
 
 ```{r}
-v_animal_Bmodel1a_date50_uh<-(VarCorr(Bmodel1a_date50_uh,
-                                        summary=FALSE)$unique_id$sd)^2
-v_dam_Bmodel1a_date50_uh<-(VarCorr(Bmodel1a_date50_uh,
-                                      summary=FALSE)$dam$sd)^2
-v_res_Bmodel1a_date50_uh<-(VarCorr(Bmodel1a_date50_uh,
-                                   summary=FALSE)$residual$sd)^2
-h_Bmodel1a_date50_uh<-as.mcmc(v_animal_Bmodel1a_date50_uh/
-                                  (v_animal_Bmodel1a_date50_uh+
-                                     v_dam_Bmodel1a_date50_uh+
-                                     v_res_Bmodel1a_date50_uh))
-m_Bmodel1a_date50_uh<-as.mcmc(v_dam_Bmodel1a_date50_uh/
-                             (v_animal_Bmodel1a_date50_uh+
-                                v_dam_Bmodel1a_date50_uh+
-                                v_res_Bmodel1a_date50_uh))
-summary(h_Bmodel1a_date50_uh)
-summary(m_Bmodel1a_date50_uh)
-plot(h_Bmodel1a_date50_uh)
-plot(m_Bmodel1a_date50_uh)
+breedV_slope_sires<-breedV_slope_sires%>%
+  left_join(data_exp%>%dplyr::select(sire,temp_sire)%>%unique())
+breedV_slope_dams<-breedV_slope_dams%>%
+  left_join(data_exp%>%dplyr::select(dam,temp_dam)%>%unique())
+```
+
+## Sire breeding values ~ origin temperatures
+
+```{r}
+mod_bV_slope_temp_sire_veg<-lm(breedV~temp_sire,
+                               subset(breedV_slope_sires,var=="veg"))
+mod_bV_slope_temp_sire_FFD<-lm(breedV~temp_sire,
+                                 subset(breedV_slope_sires,var=="FFD"))
+mod_bV_slope_temp_sire_MFD<-lm(breedV~temp_sire,
+                                 subset(breedV_slope_sires,var=="MFD"))
+mod_bV_slope_temp_sire_LFD<-lm(breedV~temp_sire,
+                                 subset(breedV_slope_sires,var=="LFD"))
 ```
 
 ```{r}
-v_animal_Bmodel1a_date50_h<-(VarCorr(Bmodel1a_date50_h,
-                                        summary=FALSE)$unique_id$sd)^2
-v_dam_Bmodel1a_date50_h<-(VarCorr(Bmodel1a_date50_h,
-                                      summary=FALSE)$dam$sd)^2
-v_res_Bmodel1a_date50_h<-(VarCorr(Bmodel1a_date50_h,
-                                   summary=FALSE)$residual$sd)^2
-h_Bmodel1a_date50_h<-as.mcmc(v_animal_Bmodel1a_date50_h/
-                                  (v_animal_Bmodel1a_date50_h+
-                                     v_dam_Bmodel1a_date50_h+
-                                     v_res_Bmodel1a_date50_h))
-m_Bmodel1a_date50_h<-as.mcmc(v_dam_Bmodel1a_date50_h/
-                             (v_animal_Bmodel1a_date50_h+
-                                v_dam_Bmodel1a_date50_h+
-                                v_res_Bmodel1a_date50_h))
-summary(h_Bmodel1a_date50_h)
-summary(m_Bmodel1a_date50_h)
-plot(h_Bmodel1a_date50_h)
-plot(m_Bmodel1a_date50_h)
+summary(mod_bV_slope_temp_sire_veg)
+summary(mod_bV_slope_temp_sire_FFD)
+summary(mod_bV_slope_temp_sire_MFD)
+summary(mod_bV_slope_temp_sire_LFD)
+# All NS
 ```
 
-## Prediction 1b
+### Plots
 
-### Models
+```{r}
+ggplot(breedV_slope_sires,aes(x=temp_sire,y=breedV_av))+
+  geom_point()+geom_smooth(method="lm")+
+  facet_wrap(~var,scales="free")+
+  xlab("Sire origin temperature")+
+  ylab("Sire breeding value for slope + population-level average")
+```
 
-```{r eval=FALSE, include=FALSE}
-Bmodel1b_veg <- brm(
-  mean_sh_growth ~ treat*unique_id + # OK like this?
-    (1 | gr(unique_id, cov = Amat_cross)) + (1|dam), 
-  data = data_exp,
-  data2 = list(Amat_cross = Amat_cross),
-  family = gaussian(),
-  chains = 4, cores = 16, iter = 5000, warmup = 1000, thin = 5
-)
-save(Bmodel1b_veg, file = "output/models/Bmodel1b_veg.rda")
+## Dam breeding values ~ origin temperatures
+
+```{r}
+mod_bV_slope_temp_dam_veg<-lm(breedV~temp_dam,
+                               subset(breedV_slope_dams,var=="veg"))
+mod_bV_slope_temp_dam_FFD<-lm(breedV~temp_dam,
+                                 subset(breedV_slope_dams,var=="FFD"))
+mod_bV_slope_temp_dam_MFD<-lm(breedV~temp_dam,
+                                 subset(breedV_slope_dams,var=="MFD"))
+mod_bV_slope_temp_dam_LFD<-lm(breedV~temp_dam,
+                                 subset(breedV_slope_dams,var=="LFD"))
+```
+
+```{r}
+summary(mod_bV_slope_temp_dam_veg)
+summary(mod_bV_slope_temp_dam_FFD)
+summary(mod_bV_slope_temp_dam_MFD)
+summary(mod_bV_slope_temp_dam_LFD)
+# All NS
+```
+
+### Plots
+
+```{r}
+ggplot(breedV_slope_dams,aes(x=temp_dam,y=breedV_av))+
+  geom_point()+geom_smooth(method="lm")+
+  facet_wrap(~var,scales="free")+
+  xlab("Dam origin temperature")+
+  ylab("Dam breeding value for slope + population-level average")
 ```
 
 # Session info
