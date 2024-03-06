@@ -226,21 +226,10 @@ data_loggers%>%filter(time<"2022-06-16")%>%
 ```
 
 ```{r}
-ggplot(data_loggers%>%filter(time<"2022-06-16"),
-       aes(x=logger_name,y=temp,color=treat))+facet_wrap(~treat,scales="free")+
-  geom_boxplot()+theme(legend.position="top")
-```
-
-```{r}
 data_loggers%>%filter(time<"2022-06-16")%>%
-  group_by(treat,location)%>%
+  group_by(logger_name,treat,location)%>%
   summarise(,mean_temp=mean(temp),var_temp=var(temp),min_temp=min(temp),max_temp=max(temp))%>%
   mutate(range_temp=max_temp-min_temp)
-```
-
-```{r}
-ggplot(data_loggers%>%filter(time<"2022-06-16"),aes(x=location,y=temp,color=treat))+
-  geom_boxplot()
 ```
 
 ```{r}
@@ -250,9 +239,19 @@ data_loggers%>%filter(time<"2022-06-16")%>%
   mutate(range_temp=max_temp-min_temp)
 ```
 
+## SI
+
 ```{r}
-ggplot(data_loggers%>%filter(time<"2022-06-16"),aes(x=treat,y=temp))+
-  geom_boxplot()
+AppS1<-ggplot(data_loggers%>%filter(time<"2022-06-16"),
+       aes(x=location,y=temp,group=logger_name))+
+  facet_wrap(~treat,scales="free",
+             labeller=labeller(treat=c(control="Control",heated="Heated")))+
+  geom_boxplot(position = position_dodge2(preserve="single"))+
+  theme(legend.position="top")+my_theme()+xlab(NULL)+ylab("Temperature")+
+  scale_x_discrete(labels=c("soil"="Soil","air"="Air"))
+AppS1
+ggsave(file="output/figures/AppS1.tiff", plot=AppS1,width=10,height=5,dpi=300,
+       compression="lzw")
 ```
 
 # Session info
