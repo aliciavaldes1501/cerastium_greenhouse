@@ -1,0 +1,211 @@
+---
+title: Small-scale genetic differentiation, in mean flowering time, but not in plasticity, along a geothermal heating gradient
+subtitle: Data analyses
+author: "Alicia Valdés"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    df_print: paged
+  pdf_document:
+    toc: yes
+    toc_depth: 4
+  word_document:
+    toc: yes
+    toc_depth: '4'
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r load packages, include=FALSE}
+library(tidyverse)
+library(sf)
+library(ggmap)
+library(raster)
+library(here)
+library(readxl)
+library(ggthemes)
+library(ggrepel)
+library(viridis)
+library(ggspatial)
+```
+
+```{r Define ggplot themes and palettes, include=FALSE}
+my_theme <- function(){
+  theme_base()+theme(plot.background=element_rect(fill="white", colour=NA))+
+  theme(legend.position="none")+theme(text=element_text(family="serif"))+
+  theme(plot.title = element_text(hjust =-0.06))
+}
+my_theme_legend <- function(){
+  theme_base()+theme(plot.background=element_rect(fill="white", colour=NA))+
+  theme(text=element_text(family="serif"))+
+  theme(plot.title = element_text(hjust =-0.06))
+}
+```
+
+??read# Read shapefiles plants and plots
+
+```{r}
+plants_2017 <- st_read("data/shapefiles/plants_2017.shp")
+plots <- st_read("data/shapefiles/plots.shp")
+```
+
+# Read data mothers and fathers
+
+```{r}
+data_mothers_fathers<-read_excel(
+  "data/edited/Cerastium_greenhouse_spring_2022_editedAV.xlsx", 
+  sheet="extracted_data")%>%
+  dplyr::select(mother,father,temp_mother,temp_father,mother_originalID_iceland,
+                father_originalID_iceland)%>%
+  distinct() # Removes duplicate rows
+```
+
+## Change incorrect temperature
+
+Temperature for mother 28 should be 45.5, not 25.5.
+
+```{r}
+data_mothers_fathers <- data_mothers_fathers %>%
+  mutate(temp_mother = if_else(mother == 28, 45.5, temp_mother))
+```
+
+# Read data experiment
+
+```{r}
+data_exp<-read_csv(file="data/clean/data_exp.csv")%>%
+  dplyr::select(dam,sire)%>%distinct()
+```
+
+# Get list of parent plants used in crossings
+
+Get unique mothers and unique fathers:
+
+```{r}
+unique_mothers<-unique(data_exp$dam)
+unique_fathers<-unique(data_exp$sire)
+```
+
+```{r}
+# Reshape the data for mothers
+mothers <- data_mothers_fathers %>%
+  dplyr::select(mother, temp_mother, mother_originalID_iceland) %>%
+  filter(mother %in% unique_mothers)%>%
+  rename(newID = mother, temperature = temp_mother, 
+         originalID = mother_originalID_iceland) %>%
+  mutate(use_in_crossing = "mother")
+# Reshape the data for fathers
+fathers <- data_mothers_fathers %>%
+  dplyr::select(father, temp_father, father_originalID_iceland) %>%
+  filter(father %in% unique_fathers)%>%
+  rename(newID = father, temperature = temp_father, 
+         originalID = father_originalID_iceland) %>%
+  mutate(use_in_crossing = "father")
+# Combine the reshaped data
+data_parents<-bind_rows(mothers,fathers)%>%
+  distinct()%>% # Removes duplicate rows
+  # split  originalID into plot and pl_id
+  mutate(plot = str_extract(originalID, "^\\w+"), 
+         # "^\\w+" matches the initial word part of originalID.
+         pl_id = as.integer(str_extract(originalID, "(?<=\\s)\\d+")))%>%
+         # "(?<=\\s)\\d+" matches the digits that follow a space in originalID
+  # Creamos una columna que combine newID con info on if mother or father
+  mutate(id_crossing=paste0(ifelse(use_in_crossing=="mother","D","S"),newID))%>%
+  # Remove rows with NAs
+  filter(!is.na(newID))%>%
+  mutate(plot_pl_id = paste0(plot, "_", pl_id))
+data_parents
+```
+
+Plants with several records:
+
+```{r}
+data_parents%>%group_by(plot_pl_id)%>%summarise(count=n())%>%filter(count>1)
+```
+
+# Select in shapefile plants that are on list of parent plants
+
+```{r}
+# Filter the 2017 shapefile to include only those rows in data_parents
+plants_2017_parents <- plants_2017 %>%
+  mutate(pl_id=as.integer(str_replace(pl_id,"H","")))%>%
+  mutate(plot_pl_id = paste0(plot, "_", pl_id))%>%
+  filter(plot_pl_id %in% data_parents$plot_pl_id)
+```
+
+Parent plants that are not in the 2017 shapefile: None!
+
+```{r}
+setdiff(data_parents$plot_pl_id, plants_2017_parents$plot_pl_id)
+```
+# Plot the shapefile of parent plants
+
+```{r}
+ggplot(data=plants_2017_parents)+geom_sf()+my_theme()
+```
+
+# Create shapefile with plot centroids and plot
+
+```{r}
+plot_centroids <- plants_2017_parents %>%
+  group_by(plot) %>%
+  summarize(geometry = st_union(geometry))%>%
+  st_centroid() %>%
+  st_as_sf()
+```
+
+```{r}
+ggplot(data=plot_centroids)+geom_sf()+my_theme()+
+  geom_text(aes(x = st_coordinates(geometry)[, 1], 
+                y = st_coordinates(geometry)[, 2], 
+                label = plot), size = 3, nudge_y = 0.0002)+
+  xlab("X")+ylab("Y")
+```
+
+# Map of plots with satellite image
+
+In QGIS!
+
+# Maps of each plot
+
+Add temperature data and newIDs:
+
+```{r}
+plants_2017_parents<-plants_2017_parents%>%
+  left_join(data_parents%>%dplyr::select(-originalID))
+```
+
+Create three columns for id_crossing, as some plants are used two or three times:
+
+```{r}
+plants_2017_parents_merged<-plants_2017_parents%>%
+  dplyr::select(plot,pl_id,plot_pl_id,temperature,id_crossing)%>%
+  group_by(plot,pl_id) %>%
+  mutate(id_crossing_1 = id_crossing[1],
+         id_crossing_2 = ifelse(n() > 1, id_crossing[2], NA_character_),
+         id_crossing_3 = ifelse(n() > 2, id_crossing[3], NA_character_))%>%
+  dplyr::select(-id_crossing)%>%
+  slice(1)
+```
+
+Create labels with id_crossing and temperature
+
+```{r}
+plants_2017_parents_merged<-plants_2017_parents_merged%>%
+  mutate(ids_crossing=ifelse(
+    !is.na(id_crossing_3),
+    paste(id_crossing_1,id_crossing_2,id_crossing_3,sep="/"),
+    ifelse(!is.na(id_crossing_2),
+           paste(id_crossing_1,id_crossing_2,sep="/"),
+           id_crossing_1)),
+    label=paste(ids_crossing,paste(temperature,"ºC"),sep="\n"))
+```
+
+
+#
