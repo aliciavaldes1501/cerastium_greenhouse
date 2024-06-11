@@ -109,11 +109,15 @@ discrepancies<-merged_data%>%filter(temp_data!=temp_list)
 print(discrepancies)  # No discrepancies
 ```
 
+# Remove 2 cases that are "out" of the NCII blocks
+
+```{r}
+data_exp<-data_exp%>%filter(!(dam==26&sire==260))
+```
+
 # Data analyses
 
-## Prediction 1
-
-There is additive genetic variation in vegetative growth and flowering time at a given temperature.
+## Additive genetic variation in flowering time
 
 ### Models
 
@@ -229,7 +233,7 @@ her_mat<-rbind(her,mat)
 her_mat
 ```
 
-### Appendix S5: LRTs for variance components
+### Appendix S7: LRTs for variance components
 
 ```{r}
 ranova(model1_FFD_uh)
@@ -240,9 +244,7 @@ ranova(model1_MFD_uh)
 ranova(model1_MFD_h)
 ```
 
-## Prediction 2
-
-Plants respond plastically to increased temperatures by starting vegetative growth and flowering earlier, and there is additive genetic variation in plasticity of these traits.
+## Additive genetic variation in flowering time plasticity
 
 ### Models
 
@@ -344,7 +346,7 @@ her_mat_treat<-rbind(her_treat,mat_treat)
 her_mat_treat
 ```
 
-### Appendix S6: LRTs for variance components
+### Appendix S8: LRTs for variance components
 
 ```{r}
 ranova(model2_FFD)
@@ -352,7 +354,7 @@ ranova(model2_LFD)
 ranova(model2_MFD)
 ```
 
-## Figure 1 (Predictions 1-2)
+## Figure 1
 
 ```{r}
 Props_var<-Props_var%>%
@@ -426,7 +428,7 @@ ggsave(file="output/figures/fig1.tiff", plot=fig1,width=10,height=5,dpi=300,
        compression="lzw")
 ```
 
-## Table 1 (Predictions 1-2)
+## Table 1
 
 ```{r}
 her_mat<-her_mat%>%
@@ -440,7 +442,7 @@ her_mat_treat<-her_mat_treat%>%
 her_mat_treat
 ```
 
-## Figure 2 (Prediction 2)
+## Figure 2
 
 Main effect of temperature treatment significant for FFD, LFD and MFD.
 
@@ -499,7 +501,7 @@ ggsave(file="output/figures/fig2.tiff", plot=fig2,width=5,height=4,dpi=300,
        compression="lzw")
 ```
 
-## Prediction 3
+## Hypothesis 1
 
 Temperature-dependent selection has resulted in small-scale genetic differentiation, and additive genetic variation in phenology is correlated with soil temperature in a counter-gradient fashion. At a given temperature, individuals with parents from warmer soils are predicted to start vegetative growth and flower later than plants with parents from colder soils.
 
@@ -664,10 +666,10 @@ ggsave(file="output/figures/fig3.tiff", plot=fig3,width=5,height=5,dpi=300,
        compression="lzw")
 ```
 
-#### Appendix S7
+#### Appendix S9
 
 ```{r}
-AppS7<-ggplot(data=Props_var_temp_mf%>%
+AppS9<-ggplot(data=Props_var_temp_mf%>%
              filter(term!="temp_sire+temp_dam"&term!="Full")%>%
              mutate(term=factor(term,levels=c("temp_sire","temp_dam"),
                                 labels=c("Sire origin temperature",
@@ -684,8 +686,8 @@ AppS7<-ggplot(data=Props_var_temp_mf%>%
   scale_color_discrete(type=c("#00BFC4","#F8766D"))+
   xlab(NULL)+ylab("Proportion of variance")+
   theme(legend.position="top",legend.title=element_blank())
-AppS7
-ggsave(file="output/figures/AppS7.tiff", plot=AppS7,width=7,height=8,dpi=300,
+AppS9
+ggsave(file="output/figures/AppS9.tiff", plot=AppS9,width=7,height=8,dpi=300,
        compression="lzw")
 ```
 
@@ -723,7 +725,7 @@ summary(model3_MFD_uh_midP)
 summary(model3_MFD_h_midP)
 ```
 
-#### Appendix S2
+#### Appendix S4
 
 ```{r}
 tab_model(model3_FFD_uh_midP,model3_MFD_uh_midP,
@@ -731,16 +733,16 @@ tab_model(model3_FFD_uh_midP,model3_MFD_uh_midP,
           transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
           show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
           dv.labels=c("FFD","MFD","LFD"),
-          file="output/tables/AppS2_uh.html")
+          file="output/tables/AppS4_uh.html")
 tab_model(model3_FFD_h_midP,model3_MFD_h_midP,
           model3_LFD_h_midP,
           transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
           show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
           dv.labels=c("FFD","MFD","LFD"),
-          file="output/tables/AppS2_h.html")
+          file="output/tables/AppS4_h.html")
 ```
 
-### Models breeding values (Appendix S4)
+### Models breeding values (Appendix S6)
 
 Get breeding values/BLUPs from models in Prediction 1.
 
@@ -863,16 +865,16 @@ summary(mod_bV_resp_temp_sire_LFD_uh)
 summary(mod_bV_resp_temp_sire_LFD_h)
 ```
 
-##### Figure S4A
+##### Figure S6A
 
 ```{r}
-figS4A<-plot(ggpredict(mod_bV_resp_temp_sire_MFD_h,terms="temp_sire"),
+figS6A<-plot(ggpredict(mod_bV_resp_temp_sire_MFD_h,terms="temp_sire"),
              add.data=T)+
   xlab("Sire origin temperature (ºC)")+
   ylab("Sire breeding value for the\nresponse of median flowering date")+
   my_theme()+ggtitle(NULL)
-figS4A
-ggsave(file="output/figures/figS4A.tiff", plot=figS4A,width=5,height=4,dpi=300,
+figS6A
+ggsave(file="output/figures/figS6A.tiff", plot=figS6A,width=5,height=4,dpi=300,
        compression="lzw")
 ```
 
@@ -909,7 +911,7 @@ summary(mod_bV_resp_temp_dam_LFD_h)
 # All NS
 ```
 
-## Prediction 4
+## Hypothesis 2
 
 Genetic differentiation related to soil temperature involves also plasticity of development rate. Differences in phenology between high and low temperatures are predicted to be smaller for plants with parents from warm soils than for plants from colder soils.
 
@@ -1011,17 +1013,17 @@ summary(model4_LFD_midP)
 summary(model4_MFD_midP)
 ```
 
-#### Appendix S3
+#### Appendix S5
 
 ```{r}
 tab_model(model4_FFD_midP,model4_MFD_midP,model4_LFD_midP,
           transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
           show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
           dv.labels=c("FFD","MFD","LFD"),
-          file="output/tables/AppS3.html")
+          file="output/tables/AppS5.html")
 ```
 
-### Models breeding values (Appendix S4)
+### Models breeding values (Appendix S6)
 
 Get breeding values/BLUPs from models in Prediction 2.
 
