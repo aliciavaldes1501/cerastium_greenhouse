@@ -23,19 +23,6 @@ options(tibble.width = Inf)
 knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
 ```
 
-# Load previously created objects
-
-```{r}
-load("output/models/partR2_model3_veg_uh.rda")
-load("output/models/partR2_model3_veg_h.rda")
-load("output/models/partR2_model3_FFD_uh.rda")
-load("output/models/partR2_model3_FFD_h.rda")
-load( "output/models/partR2_model3_LFD_uh.rda")
-load("output/models/partR2_model3_LFD_h.rda")
-load("output/models/partR2_model3_MFD_uh.rda")
-load("output/models/partR2_model3_MFD_h.rda")
-```
-
 # Load the packages used
 
 ```{r load packages, include=FALSE}
@@ -77,42 +64,6 @@ data_exp<-read_csv(file="data/clean/data_exp.csv")%>%
          across(c(total_n_fl,FFD,LFD,MFD),as.integer),
          across(c(temp_dam,temp_sire,mean_sh_growth,mean_sh_h_date1,
                   mean_sh_h_date2),as.double))
-```
-
-# Change incorrect temperature
-
-Temperature for dam 28 should be 45.5, not 25.5.
-
-```{r}
-data_exp <- data_exp %>%
-  mutate(temp_dam = if_else(dam == 28, 45.5, temp_dam))
-```
-
-# Check that temperatures for sires and dams coincide with temperatures in list of sires and dams:
-
-```{r}
-temps_dams_sires<-data_exp%>%
-  dplyr::select(dam,sire,temp_dam,temp_sire)%>%
-  distinct()%>% # Removes duplicate rows
-  pivot_longer(cols=starts_with("temp"),names_to="type",values_to="temp")%>%
-  mutate(id = case_when(type=="temp_dam"~paste0("D",dam),
-                        type=="temp_sire"~paste0("S",sire)))%>%
-  dplyr::select(id,temp)
-# Read csv file with temperatures from sire and dam list
-temps_dams_sires_list<-read_csv("data/clean/temps_dams_sires_list.csv")
-# Merge the data frames on the "id" column
-merged_data<-temps_dams_sires%>%
-  inner_join(temps_dams_sires_list,by="id",suffix=c("_data","_list"))
-# Check for discrepancies
-discrepancies<-merged_data%>%filter(temp_data!=temp_list)
-# View the discrepancies
-print(discrepancies)  # No discrepancies
-```
-
-# Remove 2 cases that are "out" of the NCII blocks
-
-```{r}
-data_exp<-data_exp%>%filter(!(dam==26&sire==260))
 ```
 
 # Data analyses
@@ -233,7 +184,7 @@ her_mat<-rbind(her,mat)
 her_mat
 ```
 
-### Appendix S7: LRTs for variance components
+### Appendix S8: LRTs for variance components
 
 ```{r}
 ranova(model1_FFD_uh)
@@ -346,7 +297,7 @@ her_mat_treat<-rbind(her_treat,mat_treat)
 her_mat_treat
 ```
 
-### Appendix S8: LRTs for variance components
+### Appendix S9: LRTs for variance components
 
 ```{r}
 ranova(model2_FFD)
@@ -583,7 +534,7 @@ Props_var_temp
 
 #### Temperature dam and sire: partR2
 
-```{r eval=FALSE, include=FALSE}
+```{r}
 partR2_model3_FFD_uh<-partR2(model3_FFD_uh,
                              partvars=c("temp_sire","temp_dam"),
                              R2_type="marginal",nboot=1000)
@@ -604,15 +555,6 @@ partR2_model3_MFD_h<-partR2(model3_MFD_h,
                              R2_type="marginal",nboot=1000)
 ```
 
-```{r eval=FALSE, include=FALSE}
-save(partR2_model3_FFD_uh, file = "output/models/partR2_model3_FFD_uh.rda")
-save(partR2_model3_FFD_h, file = "output/models/partR2_model3_FFD_h.rda")
-save(partR2_model3_LFD_uh, file = "output/models/partR2_model3_LFD_uh.rda")
-save(partR2_model3_LFD_h, file = "output/models/partR2_model3_LFD_h.rda")
-save(partR2_model3_MFD_uh, file = "output/models/partR2_model3_MFD_uh.rda")
-save(partR2_model3_MFD_h, file = "output/models/partR2_model3_MFD_h.rda")
-```
-
 ```{r}
 Props_var_temp_mf<-
   rbind(
@@ -629,10 +571,10 @@ Props_var_temp_mf<-
 Props_var_temp_mf
 ```
 
-#### Figure 3
+#### Appendix S10
 
 ```{r}
-fig3<-ggplot()+
+AppS10<-ggplot()+
   geom_bar(data=Props_var_temp_mf%>%
              filter(term!="temp_sire+temp_dam"&term!="Full")%>%
              mutate(term=factor(term,levels=c("temp_sire","temp_dam"),
@@ -661,15 +603,15 @@ fig3<-ggplot()+
   scale_shape_manual(values=c(NA,8))+
   xlab(NULL)+ylab("Proportion of variance")+
   theme(legend.position="top",legend.title=element_blank())
-fig3
-ggsave(file="output/figures/fig3.tiff", plot=fig3,width=5,height=5,dpi=300,
+AppS10
+ggsave(file="output/figures/AppS10.tiff", plot=AppS10,width=5,height=5,dpi=300,
        compression="lzw")
 ```
 
-#### Appendix S9
+#### Appendix S11
 
 ```{r}
-AppS9<-ggplot(data=Props_var_temp_mf%>%
+AppS11<-ggplot(data=Props_var_temp_mf%>%
              filter(term!="temp_sire+temp_dam"&term!="Full")%>%
              mutate(term=factor(term,levels=c("temp_sire","temp_dam"),
                                 labels=c("Sire origin temperature",
@@ -686,8 +628,8 @@ AppS9<-ggplot(data=Props_var_temp_mf%>%
   scale_color_discrete(type=c("#00BFC4","#F8766D"))+
   xlab(NULL)+ylab("Proportion of variance")+
   theme(legend.position="top",legend.title=element_blank())
-AppS9
-ggsave(file="output/figures/AppS9.tiff", plot=AppS9,width=7,height=8,dpi=300,
+AppS11
+ggsave(file="output/figures/AppS11.tiff", plot=AppS11,width=7,height=8,dpi=300,
        compression="lzw")
 ```
 
@@ -725,7 +667,7 @@ summary(model3_MFD_uh_midP)
 summary(model3_MFD_h_midP)
 ```
 
-#### Appendix S4
+#### Appendix S6
 
 ```{r}
 tab_model(model3_FFD_uh_midP,model3_MFD_uh_midP,
@@ -733,182 +675,13 @@ tab_model(model3_FFD_uh_midP,model3_MFD_uh_midP,
           transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
           show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
           dv.labels=c("FFD","MFD","LFD"),
-          file="output/tables/AppS4_uh.html")
+          file="output/tables/AppS6_uh.html")
 tab_model(model3_FFD_h_midP,model3_MFD_h_midP,
           model3_LFD_h_midP,
           transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
           show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
           dv.labels=c("FFD","MFD","LFD"),
-          file="output/tables/AppS4_h.html")
-```
-
-### Models breeding values (Appendix S6)
-
-Get breeding values/BLUPs from models in Prediction 1.
-
-```{r}
-averages_resp<-rbind(
-  data.frame(average=as.numeric(fixef(model1_FFD_uh)))%>%
-    mutate(name="FFD_uh_resp"),
-  data.frame(average=as.numeric(fixef(model1_FFD_h)))%>%
-    mutate(name="FFD_h_resp"),
-  data.frame(average=as.numeric(fixef(model1_MFD_uh)))%>%
-    mutate(name="MFD_uh_resp"),
-  data.frame(average=as.numeric(fixef(model1_MFD_h)))%>%
-    mutate(name="MFD_h_resp"),
-  data.frame(average=as.numeric(fixef(model1_LFD_uh)))%>%
-    mutate(name="LFD_uh_resp"),
-  data.frame(average=as.numeric(fixef(model1_LFD_h)))%>%
-    mutate(name="LFD_h_resp")
-  )%>%
-  separate(name,into=c("var","treat","type"))
-```
-
-```{r}
-breedV_resp_sires<-left_join(
-  left_join(
-    left_join(
-      left_join(
-        left_join(
-            ranef(model1_FFD_uh)$sire%>%rownames_to_column(var="sire")%>%
-              rename(breedV_FFD_uh_resp_sire="(Intercept)"),
-          ranef(model1_FFD_h)$sire%>%rownames_to_column(var="sire")%>%
-            rename(breedV_FFD_h_resp_sire="(Intercept)")
-          ),
-        ranef(model1_MFD_uh)$sire%>%rownames_to_column(var="sire")%>%
-          rename(breedV_MFD_uh_resp_sire="(Intercept)")
-        ),
-      ranef(model1_MFD_h)$sire%>%rownames_to_column(var="sire")%>%
-        rename(breedV_MFD_h_resp_sire="(Intercept)")
-      ),
-    ranef(model1_LFD_uh)$sire%>%rownames_to_column(var="sire")%>%
-      rename(breedV_LFD_uh_resp_sire="(Intercept)")
-    ),
-  ranef(model1_LFD_h)$sire%>%rownames_to_column(var="sire")%>%
-    rename(breedV_LFD_h_resp_sire="(Intercept)")
-  )%>%
-  pivot_longer(cols=breedV_FFD_uh_resp_sire:breedV_LFD_h_resp_sire,
-               names_to=c("remove","var","treat","type","comp"),names_sep="_",
-               values_to="breedV")%>%
-  dplyr::select(-remove)%>%
-  left_join(averages_resp)%>%mutate(breedV_av=breedV+average)
-```
-
-```{r}
-breedV_resp_dams<-left_join(
-  left_join(
-    left_join(
-      left_join(
-        left_join(
-            ranef(model1_FFD_uh)$dam%>%rownames_to_column(var="dam")%>%
-              rename(breedV_FFD_uh_resp_dam="(Intercept)"),
-          ranef(model1_FFD_h)$dam%>%rownames_to_column(var="dam")%>%
-            rename(breedV_FFD_h_resp_dam="(Intercept)")
-          ),
-        ranef(model1_MFD_uh)$dam%>%rownames_to_column(var="dam")%>%
-          rename(breedV_MFD_uh_resp_dam="(Intercept)")
-        ),
-      ranef(model1_MFD_h)$dam%>%rownames_to_column(var="dam")%>%
-        rename(breedV_MFD_h_resp_dam="(Intercept)")
-      ),
-    ranef(model1_LFD_uh)$dam%>%rownames_to_column(var="dam")%>%
-      rename(breedV_LFD_uh_resp_dam="(Intercept)")
-    ),
-  ranef(model1_LFD_h)$dam%>%rownames_to_column(var="dam")%>%
-    rename(breedV_LFD_h_resp_dam="(Intercept)")
-  )%>%
-  pivot_longer(cols=breedV_FFD_uh_resp_dam:breedV_LFD_h_resp_dam,
-               names_to=c("remove","var","treat","type","comp"),names_sep="_",
-               values_to="breedV")%>%
-  dplyr::select(-remove)%>%
-  left_join(averages_resp)%>%mutate(breedV_av=breedV+average)
-```
-
-Add origin temperatures:
-
-```{r}
-breedV_resp_sires<-breedV_resp_sires%>%
-  left_join(data_exp%>%dplyr::select(sire,temp_sire)%>%unique())
-breedV_resp_dams<-breedV_resp_dams%>%
-  left_join(data_exp%>%dplyr::select(dam,temp_dam)%>%unique())
-```
-
-#### Sire breeding values ~ origin temperatures
-
-```{r}
-mod_bV_resp_temp_sire_FFD_uh<-lm(breedV~temp_sire,
-                                 subset(breedV_resp_sires,
-                                        var=="FFD"&treat=="uh"))
-mod_bV_resp_temp_sire_FFD_h<-lm(breedV~temp_sire,
-                                 subset(breedV_resp_sires,
-                                        var=="FFD"&treat=="h"))
-mod_bV_resp_temp_sire_MFD_uh<-lm(breedV~temp_sire,
-                                 subset(breedV_resp_sires,
-                                        var=="MFD"&treat=="uh"))
-mod_bV_resp_temp_sire_MFD_h<-lm(breedV~temp_sire,
-                                 subset(breedV_resp_sires,
-                                        var=="MFD"&treat=="h"))
-mod_bV_resp_temp_sire_LFD_uh<-lm(breedV~temp_sire,
-                                 subset(breedV_resp_sires,
-                                        var=="LFD"&treat=="uh"))
-mod_bV_resp_temp_sire_LFD_h<-lm(breedV~temp_sire,
-                                 subset(breedV_resp_sires,
-                                        var=="LFD"&treat=="h"))
-```
-
-```{r}
-summary(mod_bV_resp_temp_sire_FFD_uh)
-summary(mod_bV_resp_temp_sire_FFD_h)
-summary(mod_bV_resp_temp_sire_MFD_uh)
-summary(mod_bV_resp_temp_sire_MFD_h) #*
-summary(mod_bV_resp_temp_sire_LFD_uh)
-summary(mod_bV_resp_temp_sire_LFD_h)
-```
-
-##### Figure S6A
-
-```{r}
-figS6A<-plot(ggpredict(mod_bV_resp_temp_sire_MFD_h,terms="temp_sire"),
-             add.data=T)+
-  xlab("Sire origin temperature (ºC)")+
-  ylab("Sire breeding value for the\nresponse of median flowering date")+
-  my_theme()+ggtitle(NULL)
-figS6A
-ggsave(file="output/figures/figS6A.tiff", plot=figS6A,width=5,height=4,dpi=300,
-       compression="lzw")
-```
-
-#### Dam breeding values ~ origin temperatures
-
-```{r}
-mod_bV_resp_temp_dam_FFD_uh<-lm(breedV~temp_dam,
-                                 subset(breedV_resp_dams,
-                                        var=="FFD"&treat=="uh"))
-mod_bV_resp_temp_dam_FFD_h<-lm(breedV~temp_dam,
-                                 subset(breedV_resp_dams,
-                                        var=="FFD"&treat=="h"))
-mod_bV_resp_temp_dam_MFD_uh<-lm(breedV~temp_dam,
-                                 subset(breedV_resp_dams,
-                                        var=="MFD"&treat=="uh"))
-mod_bV_resp_temp_dam_MFD_h<-lm(breedV~temp_dam,
-                                 subset(breedV_resp_dams,
-                                        var=="MFD"&treat=="h"))
-mod_bV_resp_temp_dam_LFD_uh<-lm(breedV~temp_dam,
-                                 subset(breedV_resp_dams,
-                                        var=="LFD"&treat=="uh"))
-mod_bV_resp_temp_dam_LFD_h<-lm(breedV~temp_dam,
-                                 subset(breedV_resp_dams,
-                                        var=="LFD"&treat=="h"))
-```
-
-```{r}
-summary(mod_bV_resp_temp_dam_FFD_uh)
-summary(mod_bV_resp_temp_dam_FFD_h)
-summary(mod_bV_resp_temp_dam_MFD_uh)
-summary(mod_bV_resp_temp_dam_MFD_h)
-summary(mod_bV_resp_temp_dam_LFD_uh)
-summary(mod_bV_resp_temp_dam_LFD_h)
-# All NS
+          file="output/tables/AppS6_h.html")
 ```
 
 ## Hypothesis 2
@@ -952,10 +725,10 @@ tab_model(model4_FFD,model4_MFD,model4_LFD,
           file="output/tables/Table3.html")
 ```
 
-#### Figure 4
+#### Figure 3
 
 ```{r}
-fig4<-ggplot()+
+fig3<-ggplot()+
   geom_ribbon(data=data.frame(ggpredict(model3_MFD_h,
                                         terms=c("temp_sire"))),
               aes(x=x,y=predicted,ymin=conf.low,ymax=conf.high),
@@ -988,8 +761,8 @@ fig4<-ggplot()+
   theme(legend.position = c(0.25, 0.95),legend.direction="horizontal")+
   theme(legend.background = element_rect(fill = "transparent"),
         legend.spacing.x = unit(0.1, 'cm'))
-fig4
-ggsave(file="output/figures/fig4.tiff", plot=fig4,width=4,height=4,dpi=300,
+fig3
+ggsave(file="output/figures/fig3.tiff", plot=fig3,width=4,height=4,dpi=300,
        compression="lzw")
 ```
 
@@ -1013,118 +786,17 @@ summary(model4_LFD_midP)
 summary(model4_MFD_midP)
 ```
 
-#### Appendix S5
+#### Appendix S7
 
 ```{r}
 tab_model(model4_FFD_midP,model4_MFD_midP,model4_LFD_midP,
           transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
           show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
           dv.labels=c("FFD","MFD","LFD"),
-          file="output/tables/AppS5.html")
+          file="output/tables/AppS7.html")
 ```
 
-### Models breeding values (Appendix S6)
-
-Get breeding values/BLUPs from models in Prediction 2.
-
-```{r}
-averages_plast<-rbind(
-  data.frame(ggpredict(model2_FFD))[1:2]%>%
-    pivot_wider(names_from=treat.x,values_from=treat.predicted)%>%
-    mutate(slope=heatmat-unheated,name="FFD_plast"),
-  data.frame(ggpredict(model2_MFD))[1:2]%>%
-    pivot_wider(names_from=treat.x,values_from=treat.predicted)%>%
-    mutate(slope=heatmat-unheated,name="MFD_plast"),
-  data.frame(ggpredict(model2_LFD))[1:2]%>%
-    pivot_wider(names_from=treat.x,values_from=treat.predicted)%>%
-    mutate(slope=heatmat-unheated,name="LFD_plast")
-  )%>%
-  separate(name,into=c("var","type"))%>%
-  rename(average=slope,av_heatmat=heatmat,av_unheated=unheated)%>%
-  dplyr::select(var,type,average,av_heatmat,av_unheated)
-```
-
-```{r}
-breedV_plast_sires<-left_join(
-  ranef(model2_FFD)$`treat:sire`%>%
-    rownames_to_column(var="treat_sire")%>%
-    rename(breedV_FFD_plast_sire="(Intercept)")%>%
-    separate(treat_sire,into=c("treat","sire"))%>%
-    pivot_wider(names_from="treat",
-                values_from="breedV_FFD_plast_sire",
-                names_prefix="breedV_FFD_plast_sire_"),
-  ranef(model2_MFD)$`treat:sire`%>%
-    rownames_to_column(var="treat_sire")%>%
-    rename(breedV_MFD_plast_sire="(Intercept)")%>%
-    separate(treat_sire,into=c("treat","sire"))%>%
-    pivot_wider(names_from="treat",
-                values_from="breedV_MFD_plast_sire",
-                names_prefix="breedV_MFD_plast_sire_")
-  )%>%
-  pivot_longer(cols=breedV_FFD_plast_sire_heatmat:breedV_MFD_plast_sire_unheated,
-               names_to=c("remove","var","type","comp","treat"),names_sep="_",
-               values_to="breedV")%>%
-  dplyr::select(-remove)%>%
-  pivot_wider(names_from="treat",values_from="breedV",names_prefix="breedV_")%>%
-  mutate(breedV=breedV_heatmat-breedV_unheated)%>% # Difference heated-unheated
-  left_join(averages_plast)%>%mutate(breedV_av=average+breedV)
-```
-
-```{r}
-breedV_plast_dams<-
-  ranef(model2_LFD)$`treat:dam`%>%
-    rownames_to_column(var="treat_dam")%>%
-    rename(breedV_LFD_plast_dam="(Intercept)")%>%
-    separate(treat_dam,into=c("treat","dam"))%>%
-    pivot_wider(names_from="treat",
-                values_from="breedV_LFD_plast_dam",
-                names_prefix="breedV_LFD_plast_dam_")%>%
-    pivot_longer(cols=breedV_LFD_plast_dam_heatmat:breedV_LFD_plast_dam_unheated,
-               names_to=c("remove","var","type","comp","treat"),names_sep="_",
-               values_to="breedV")%>%
-  dplyr::select(-remove)%>%
-  pivot_wider(names_from="treat",values_from="breedV",names_prefix="breedV_")%>%
-  mutate(breedV=breedV_heatmat-breedV_unheated)%>% # Difference heated-unheated
-  left_join(averages_plast)%>%mutate(breedV_av=average+breedV)
-```
-
-Add origin temperatures:
-
-```{r}
-breedV_plast_sires<-breedV_plast_sires%>%
-  left_join(data_exp%>%dplyr::select(sire,temp_sire)%>%unique())
-breedV_plast_dams<-breedV_plast_dams%>%
-  left_join(data_exp%>%dplyr::select(dam,temp_dam)%>%unique())
-```
-
-#### Sire breeding values ~ origin temperatures
-
-```{r}
-mod_bV_plast_temp_sire_FFD<-lm(breedV~temp_sire,
-                                 subset(breedV_plast_sires,var=="FFD"))
-mod_bV_plast_temp_sire_MFD<-lm(breedV~temp_sire,
-                                 subset(breedV_plast_sires,var=="MFD"))
-```
-
-```{r}
-summary(mod_bV_plast_temp_sire_FFD)
-summary(mod_bV_plast_temp_sire_MFD)
-# All NS
-```
-
-#### Dam breeding values ~ origin temperatures
-
-```{r}
-mod_bV_plast_temp_dam_LFD<-lm(breedV~temp_dam,
-                                 subset(breedV_plast_dams,var=="LFD"))
-```
-
-```{r}
-summary(mod_bV_plast_temp_dam_LFD)
-# All NS
-```
-
-# New appendix: relations with flower number
+# Appendix S12: relations with flower number
 
 ```{r}
 data_exp<-data_exp%>%mutate(total_n_fl_log=log(total_n_fl))
@@ -1152,6 +824,30 @@ data_plot_fln<-rbind(
 ```
 
 ```{r}
+r2_values <- data.frame(
+  variable = c("FFD", "MFD", "LFD"),
+  r2 = c(round(summary(model_FFD_fln)$r.squared,3),
+         round(summary(model_MFD_fln)$r.squared,3),
+         round(summary(model_LFD_fln)$r.squared,3))
+)
+```
+
+```{r}
+data_plot_fln <- data_plot_fln %>%
+  left_join(r2_values, by = "variable")
+```
+
+```{r}
+custom_labeller <- as_labeller(
+  setNames(
+    paste0(c("FFD", "MFD", "LFD"), "\nR² = ", c(0.362, 0.040, 0.107)), 
+    c("FFD", "MFD", "LFD")
+    )
+  )
+```
+
+
+```{r}
 ggplot()+
   geom_point(data=data_exp%>%select(FFD,LFD,MFD,total_n_fl_log)%>%
                pivot_longer(cols=c(FFD, MFD, LFD),names_to="variable",
@@ -1159,7 +855,7 @@ ggplot()+
                mutate(variable=factor(variable,levels=c("FFD","MFD","LFD"))),
              aes(x=total_n_fl_log,y=value),
              alpha=0.25,size=1.5,show.legend=F)+
-  facet_wrap(~variable)+
+  facet_wrap(~variable, labeller = custom_labeller) + 
   geom_ribbon(data=data_plot_fln,
               aes(x=total_n_fl_log.x,y=total_n_fl_log.predicted,
                   ymin=total_n_fl_log.conf.low,ymax=total_n_fl_log.conf.high),
@@ -1168,10 +864,52 @@ ggplot()+
             aes(x=total_n_fl_log.x,y=total_n_fl_log.predicted))+
   my_theme()+theme(legend.title=element_blank())+
   xlab("Total number of flowers (log)")+ylab("Flowering date")
-ggsave(file="output/figures/new_appendix.tiff", width=12,height=5,dpi=300,
+ggsave(file="output/figures/AppS12.tiff", width=12,height=5,dpi=300,
        compression="lzw")
 ```
 
+# Appendix S4: Distances crossings
+
+Read data from csv files:
+
+```{r}
+distances_crossings<-read_csv(file="data/clean/distances_crossings.csv")
+distances_crossings
+```
+
+Histograms:
+
+```{r}
+new_new_appendix<-grid.arrange(
+  ggplot(distances_crossings,aes(x=dist))+
+    geom_histogram(color="black",fill="grey",bins=15)+
+    my_theme()+xlab("Distance (m)")+ylab("Number of crossings")+ggtitle("A)"),
+  ggplot(data_exp%>%mutate(temp_diff=abs(temp_dam-temp_sire))%>%
+           distinct(dam_sire,temp_diff),
+         aes(x=temp_diff))+geom_histogram(color="black",fill="grey",bins=15)+
+    my_theme()+
+    xlab("Absolute temperature difference (ºC)")+
+    ylab("Number of crossings")+ggtitle("B)"),
+  ncol=2)
+ggsave(file="output/figures/new_new_appendix.tiff", plot=new_new_appendix,
+       width=12,height=5,dpi=300,compression="lzw")
+```
+
+Ranges, means and SDs (for main text):
+
+```{r}
+range(distances_crossings$dist)
+mean(distances_crossings$dist)
+sd(distances_crossings$dist)
+```
+```{r}
+range((data_exp%>%mutate(temp_diff=abs(temp_dam-temp_sire))%>%
+         distinct(dam_sire,temp_diff))$temp_diff)
+mean((data_exp%>%mutate(temp_diff=abs(temp_dam-temp_sire))%>%
+         distinct(dam_sire,temp_diff))$temp_diff)
+sd((data_exp%>%mutate(temp_diff=abs(temp_dam-temp_sire))%>%
+         distinct(dam_sire,temp_diff))$temp_diff)
+```
 
 # Session info
 

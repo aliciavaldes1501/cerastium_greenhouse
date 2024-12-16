@@ -1152,6 +1152,30 @@ data_plot_fln<-rbind(
 ```
 
 ```{r}
+r2_values <- data.frame(
+  variable = c("FFD", "MFD", "LFD"),
+  r2 = c(round(summary(model_FFD_fln)$r.squared,3),
+         round(summary(model_MFD_fln)$r.squared,3),
+         round(summary(model_LFD_fln)$r.squared,3))
+)
+```
+
+```{r}
+data_plot_fln <- data_plot_fln %>%
+  left_join(r2_values, by = "variable")
+```
+
+```{r}
+custom_labeller <- as_labeller(
+  setNames(
+    paste0(c("FFD", "MFD", "LFD"), "\nR² = ", c(0.362, 0.040, 0.107)), 
+    c("FFD", "MFD", "LFD")
+    )
+  )
+```
+
+
+```{r}
 ggplot()+
   geom_point(data=data_exp%>%select(FFD,LFD,MFD,total_n_fl_log)%>%
                pivot_longer(cols=c(FFD, MFD, LFD),names_to="variable",
@@ -1159,7 +1183,7 @@ ggplot()+
                mutate(variable=factor(variable,levels=c("FFD","MFD","LFD"))),
              aes(x=total_n_fl_log,y=value),
              alpha=0.25,size=1.5,show.legend=F)+
-  facet_wrap(~variable)+
+  facet_wrap(~variable, labeller = custom_labeller) + 
   geom_ribbon(data=data_plot_fln,
               aes(x=total_n_fl_log.x,y=total_n_fl_log.predicted,
                   ymin=total_n_fl_log.conf.low,ymax=total_n_fl_log.conf.high),
@@ -1172,6 +1196,401 @@ ggsave(file="output/figures/new_appendix.tiff", width=12,height=5,dpi=300,
        compression="lzw")
 ```
 
+Correlations:
+
+```{r}
+with(data_exp,cor(FFD,total_n_fl,use="complete.obs"))
+with(data_exp,cor(MFD,total_n_fl,use="complete.obs"))
+with(data_exp,cor(LFD,total_n_fl,use="complete.obs"))
+```
+
+
+# New appendix: Distances crossings
+
+Read data from csv files:
+
+```{r}
+distances_crossings<-read_csv(file="data/clean/distances_crossings.csv")
+distances_crossings
+```
+
+Histograms:
+
+```{r}
+new_new_appendix<-grid.arrange(
+  ggplot(distances_crossings,aes(x=dist))+
+    geom_histogram(color="black",fill="grey",bins=15)+
+    my_theme()+xlab("Distance (m)")+ylab("Number of crossings")+ggtitle("A)"),
+  ggplot(data_exp%>%mutate(temp_diff=abs(temp_dam-temp_sire))%>%
+           distinct(dam_sire,temp_diff),
+         aes(x=temp_diff))+geom_histogram(color="black",fill="grey",bins=15)+
+    my_theme()+
+    xlab("Absolute temperature difference (ºC)")+
+    ylab("Number of crossings")+ggtitle("B)"),
+  ncol=2)
+ggsave(file="output/figures/new_new_appendix.tiff", plot=new_new_appendix,
+       width=12,height=5,dpi=300,compression="lzw")
+```
+
+Ranges, means and SDs (for main text):
+
+```{r}
+range(distances_crossings$dist)
+mean(distances_crossings$dist)
+sd(distances_crossings$dist)
+```
+```{r}
+range((data_exp%>%mutate(temp_diff=abs(temp_dam-temp_sire))%>%
+         distinct(dam_sire,temp_diff))$temp_diff)
+mean((data_exp%>%mutate(temp_diff=abs(temp_dam-temp_sire))%>%
+         distinct(dam_sire,temp_diff))$temp_diff)
+sd((data_exp%>%mutate(temp_diff=abs(temp_dam-temp_sire))%>%
+         distinct(dam_sire,temp_diff))$temp_diff)
+```
+
+# Rerun analyses with block
+
+## Read data from csv file
+
+```{r}
+data_exp_blocks<-read_csv(file="data/clean/data_exp_blocks.csv")%>%
+  mutate(across(c(unique_id, treat,sire,dam,dam_sire,block),as.factor),
+         across(c(total_n_fl,FFD,LFD,MFD),as.integer),
+         across(c(temp_dam,temp_sire,mean_sh_growth,mean_sh_h_date1,
+                  mean_sh_h_date2),as.double))
+```
+
+## Additive genetic variation in flowering time
+
+### Models
+
+```{r}
+model1_FFD_uh_block<-lmer(FFD~1+(1|sire)+(1|dam)+(1|sire:dam)+(1|block),
+                 subset(data_exp_blocks,treat=="unheated"))
+model1_FFD_h_block<-lmer(FFD~1+(1|sire)+(1|dam)+(1|sire:dam)+(1|block),
+                 subset(data_exp_blocks,treat=="heatmat"))
+model1_LFD_uh_block<-lmer(LFD~1+(1|sire)+(1|dam)+(1|sire:dam)+(1|block),
+                 subset(data_exp_blocks,treat=="unheated"))
+model1_LFD_h_block<-lmer(LFD~1+(1|sire)+(1|dam)+(1|sire:dam)+(1|block),
+                 subset(data_exp_blocks,treat=="heatmat"))
+model1_MFD_uh_block<-lmer(MFD~1+(1|sire)+(1|dam)+(1|sire:dam)+(1|block),
+                 subset(data_exp_blocks,treat=="unheated"))
+model1_MFD_h_block<-lmer(MFD~1+(1|sire)+(1|dam)+(1|sire:dam)+(1|block),
+                 subset(data_exp_blocks,treat=="heatmat"))
+summary(model1_FFD_uh_block)
+summary(model1_FFD_h_block)
+summary(model1_LFD_uh_block)
+summary(model1_LFD_h_block)
+summary(model1_MFD_uh_block)
+summary(model1_MFD_h_block)
+```
+
+### Proportions of variance
+
+```{r}
+Variance_FFD_uh_block<-as.data.frame(VarCorr(model1_FFD_uh_block))[,c(1,4)]
+Variance_LFD_uh_block<-as.data.frame(VarCorr(model1_LFD_uh_block))[,c(1,4)]
+Variance_MFD_uh_block<-as.data.frame(VarCorr(model1_MFD_uh_block))[,c(1,4)]
+Variance_FFD_h_block<-as.data.frame(VarCorr(model1_FFD_h_block))[,c(1,4)]
+Variance_LFD_h_block<-as.data.frame(VarCorr(model1_LFD_h_block))[,c(1,4)]
+Variance_MFD_h_block<-as.data.frame(VarCorr(model1_MFD_h_block))[,c(1,4)]
+# Intra-class correlations
+PropVar_FFD_uh_block <- Variance_FFD_uh_block%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="FFD",treat="unheated")
+PropVar_LFD_uh_block <- Variance_LFD_uh_block%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="LFD",treat="unheated")
+PropVar_MFD_uh_block <- Variance_MFD_uh_block%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="MFD",treat="unheated")
+PropVar_FFD_h_block <- Variance_FFD_h_block%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="FFD",treat="heated")
+PropVar_LFD_h_block <- Variance_LFD_h_block%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="LFD",treat="heated")
+PropVar_MFD_h_block <- Variance_MFD_h_block%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="MFD",treat="heated")
+Props_var_block<-rbind(PropVar_FFD_uh_block,PropVar_LFD_uh_block,
+                       PropVar_MFD_uh_block,PropVar_FFD_h_block,
+                       PropVar_LFD_h_block,PropVar_MFD_h_block)
+```
+
+```{r}
+Props_var_block
+```
+
+### Heritability and maternal effects
+
+```{r}
+# h^2 (paternal effects)
+her_FFD_uh_block<-as.numeric(4*subset(PropVar_FFD_uh_block,grp=="sire")[3])
+her_FFD_h_block<-as.numeric(4*subset(PropVar_FFD_h_block,grp=="sire")[3])
+her_LFD_uh_block<-as.numeric(4*subset(PropVar_LFD_uh_block,grp=="sire")[3])
+her_LFD_h_block<-as.numeric(4*subset(PropVar_LFD_h_block,grp=="sire")[3])
+her_MFD_uh_block<-as.numeric(4*subset(PropVar_MFD_uh_block,grp=="sire")[3])
+her_MFD_h_block<-as.numeric(4*subset(PropVar_MFD_h_block,grp=="sire")[3])
+# Because the additive genetic variance, VA,
+# is expected to be four times the among pollen‐donor variance 
+# (Falconer & Mackay, 1996; Lynch & Walsh, 1998)
+her_block<-data.frame(value=rbind(her_FFD_uh_block,her_FFD_h_block,
+                                  her_LFD_uh_block,her_LFD_h_block,
+                                  her_MFD_uh_block,her_MFD_h_block))%>%
+  rownames_to_column()%>%
+  mutate(variable=c("FFD","FFD","LFD","LFD","MFD","MFD"),
+         treat=c("unheated","heated","unheated","heated",
+                 "unheated","heated"),
+         effect="Heritability")
+```
+
+```{r}
+# maternal effects
+
+# Maternal - paternal
+# ----------------------
+# summed effects
+
+# Because the pollen‐recipient variance component contains a combination of
+# genetic and environmental effects, we subtracted the additive genetic 
+# (pollen donor) component from the pollen-recipient variance component
+# before dividing the resulting estimate by VP to estimate 
+# m2 (m2 = (Vpollen recipient − Vpollen donor)/VP).
+
+mat_FFD_uh_block<-(Variance_FFD_uh_block[2,2]-Variance_FFD_uh_block[3,2])/
+  as.numeric(Variance_FFD_uh_block%>%summarise(sum(vcov)))
+mat_FFD_h_block<-(Variance_FFD_h_block[2,2]-Variance_FFD_h_block[3,2])/
+  as.numeric(Variance_FFD_h_block%>%summarise(sum(vcov)))
+mat_LFD_uh_block<-(Variance_LFD_uh_block[2,2]-Variance_LFD_uh_block[3,2])/
+  as.numeric(Variance_LFD_uh_block%>%summarise(sum(vcov)))
+mat_LFD_h_block<-(Variance_LFD_h_block[2,2]-Variance_LFD_h_block[3,2])/
+  as.numeric(Variance_LFD_h_block%>%summarise(sum(vcov)))
+mat_MFD_uh_block<-(Variance_MFD_uh_block[2,2]-Variance_MFD_uh_block[3,2])/
+  as.numeric(Variance_MFD_uh_block%>%summarise(sum(vcov)))
+mat_MFD_h_block<-(Variance_MFD_h_block[2,2]-Variance_MFD_h_block[3,2])/
+  as.numeric(Variance_MFD_h_block%>%summarise(sum(vcov)))
+mat_block<-data.frame(value=rbind(mat_FFD_uh_block,mat_FFD_h_block,
+                                  mat_LFD_uh_block,mat_LFD_h_block,
+                                  mat_MFD_uh_block,mat_MFD_h_block))%>%
+  rownames_to_column()%>%
+  mutate(variable=c("FFD","FFD","LFD","LFD","MFD","MFD"),
+         treat=c("unheated","heated","unheated","heated",
+                 "unheated","heated"),
+         effect="Maternal effects")
+```
+
+```{r}
+her_mat_block<-rbind(her_block,mat_block)
+her_mat_block
+```
+
+### Appendix : LRTs for variance components
+
+```{r}
+ranova(model1_FFD_uh_block)
+ranova(model1_FFD_h_block)
+ranova(model1_LFD_uh_block)
+ranova(model1_LFD_h_block)
+ranova(model1_MFD_uh_block)
+ranova(model1_MFD_h_block)
+```
+
+## Additive genetic variation in flowering time plasticity
+
+### Models
+
+```{r}
+model2_FFD_block<-lmer(FFD~treat+
+                    (1|sire)+(1|dam)+
+                    (1|treat:sire)+
+                    #(1|treat:dam)+ # Removed to avoid singular fit
+                    (1|sire:dam)+(1|block),
+                  data_exp_blocks)
+model2_LFD_block<-lmer(LFD~treat+
+                    (1|sire)+(1|dam)+
+                    #(1|treat:sire)+ # Removed to avoid singular fit
+                    (1|treat:dam)+
+                    (1|sire:dam)+(1|block),
+                  data_exp_blocks)
+model2_MFD_block<-lmer(MFD~treat+
+                    (1|sire)+(1|dam)+
+                    (1|treat:sire)+
+                    (1|treat:dam)+ # No need to remove to aovid singular fit!
+                    (1|sire:dam)+(1|block),
+                  data_exp_blocks)
+summary(model2_FFD_block)
+summary(model2_LFD_block)
+summary(model2_MFD_block)
+```
+
+### Proportions of variance
+
+```{r}
+# extract variance components
+Variance_FFD_treat_block <- as.data.frame(VarCorr(model2_FFD_block))[,c(1,4)]  
+Variance_LFD_treat_block <- as.data.frame(VarCorr(model2_LFD_block))[,c(1,4)]  
+Variance_MFD_treat_block <- as.data.frame(VarCorr(model2_MFD_block))[,c(1,4)]  
+# Intra-class correlation
+PropVar_FFD_treat_block <- Variance_FFD_treat_block%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="FFD")
+PropVar_LFD_treat_block <- Variance_LFD_treat_block%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="LFD")
+PropVar_MFD_treat_block <- Variance_MFD_treat_block%>%
+  mutate(propvar=vcov/sum(vcov))%>%mutate(variable="MFD")
+# Proportional variance
+Props_var_treat_block<-rbind(PropVar_FFD_treat_block,PropVar_LFD_treat_block,
+                       PropVar_MFD_treat_block)
+```
+
+```{r}
+Props_var_treat_block
+```
+
+### Heritability and maternal effects
+
+```{r}
+# h^2 (paternal effects)
+her_FFD_treat_block<-4*subset(PropVar_FFD_treat_block,grp=="treat:sire")[3]
+her_LFD_treat_block<-0
+her_MFD_treat_block<-4*subset(PropVar_MFD_treat_block,grp=="treat:sire")[3]
+# Because the additive genetic variance, VA,
+# is expected to be four times the among pollen‐donor variance 
+# (Falconer & Mackay, 1996; Lynch & Walsh, 1998)
+her_treat_block<-data.frame(value=rbind(her_FFD_treat_block,
+                                  her_LFD_treat_block,her_MFD_treat_block))%>%
+  mutate(variable=c("FFD","LFD","MFD"),
+         effect="Heritability")%>%
+  rename(value=propvar)
+```
+
+```{r}
+# maternal effects
+
+# Maternal - paternal
+# ----------------------
+# summed effects
+
+# Because the pollen‐recipient variance component contains a combination of
+# genetic and environmental effects, we subtracted the additive genetic 
+# (pollen donor) component from the pollen-recipient variance component
+# before dividing the resulting estimate by VP to estimate 
+# m2 (m2 = (Vpollen recipient − Vpollen donor)/VP).
+
+mat_FFD_treat_block<-(0-
+                  subset(Variance_FFD_treat_block,grp=="treat:sire")[2])/
+  Variance_FFD_treat_block%>%summarise(sum(vcov))
+mat_LFD_treat_block<-(subset(Variance_LFD_treat_block,grp=="treat:dam")[2]-
+                  0)/
+  Variance_LFD_treat_block%>%summarise(sum(vcov))
+mat_MFD_treat_block<-(subset(Variance_MFD_treat_block,grp=="treat:dam")[2]-
+                  subset(Variance_MFD_treat_block,grp=="treat:sire")[2])/
+  Variance_MFD_treat_block%>%summarise(sum(vcov))
+mat_treat_block<-data.frame(value=rbind(mat_FFD_treat_block,
+                                  mat_LFD_treat_block,mat_MFD_treat_block))%>%
+  mutate(variable=c("FFD","LFD","MFD"),
+         effect="Maternal effects")%>%
+  rename(value=vcov)
+```
+
+```{r}
+her_mat_treat_block<-rbind(her_treat_block,mat_treat_block)
+her_mat_treat_block
+```
+
+### Appendix X: LRTs for variance components
+
+```{r}
+ranova(model2_FFD_block)
+ranova(model2_LFD_block)
+ranova(model2_MFD_block)
+```
+
+## Table 1
+
+```{r}
+her_mat_block<-her_mat_block%>%
+  mutate(variable=factor(variable,levels=c("FFD","MFD","LFD")),
+         treat=factor(treat,levels=c("unheated","heated")))%>%
+  dplyr::select(-rowname)%>%
+  pivot_wider(names_from="effect",values_from="value")
+her_mat_block
+her_mat_treat_block<-her_mat_treat_block%>%
+  pivot_wider(names_from="effect",values_from="value")
+her_mat_treat_block
+```
+
+## Hypothesis 1
+
+Temperature-dependent selection has resulted in small-scale genetic differentiation, and additive genetic variation in phenology is correlated with soil temperature in a counter-gradient fashion. At a given temperature, individuals with parents from warmer soils are predicted to start vegetative growth and flower later than plants with parents from colder soils.
+
+### Models temperatures sire and dam
+
+```{r}
+model3_FFD_uh_block<-lmer(FFD~temp_sire+temp_dam+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                      #+(1|block), # Removed to avoid singular fit
+                 subset(data_exp_blocks,treat=="unheated"&!is.na(FFD)))
+model3_FFD_h_block<-lmer(FFD~temp_sire+temp_dam+
+                     (1|sire)+(1|dam)+(1|sire:dam)+(1|block),
+                 subset(data_exp_blocks,treat=="heatmat"&!is.na(FFD)))
+model3_LFD_uh_block<-lmer(LFD~temp_sire+temp_dam+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                      #+(1|block), # Removed to avoid singular fit
+                 subset(data_exp_blocks,treat=="unheated"&!is.na(LFD)))
+model3_LFD_h_block<-lmer(LFD~temp_sire+temp_dam+
+                     #(1|sire)+ # Removed to avoid singular fit
+                       (1|dam)+(1|sire:dam)+(1|block),
+                 subset(data_exp_blocks,treat=="heatmat"&!is.na(LFD)))
+model3_MFD_uh_block<-lmer(MFD~temp_sire+temp_dam+
+                      (1|sire)+(1|dam)+(1|sire:dam),
+                      #+(1|block), # Removed to avoid singular fit
+                 subset(data_exp_blocks,treat=="unheated"&!is.na(MFD)))
+model3_MFD_h_block<-lmer(MFD~temp_sire+temp_dam+
+                     (1|sire)+ # No need to remove to avoid singular fit!
+                     (1|dam)+(1|sire:dam)+(1|block),
+                 subset(data_exp_blocks,treat=="heatmat"&!is.na(MFD)))
+summary(model3_FFD_uh_block)
+summary(model3_FFD_h_block)
+summary(model3_LFD_uh_block)
+summary(model3_LFD_h_block)
+summary(model3_MFD_uh_block)
+summary(model3_MFD_h_block)
+```
+
+#### Table 2
+
+```{r}
+tab_model(model3_FFD_uh_block,model3_MFD_uh_block,model3_LFD_uh_block,
+          transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
+          show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
+          dv.labels=c("FFD","MFD","LFD"),
+          file="output/tables/Table2_uh_block.html")
+tab_model(model3_FFD_h_block,model3_MFD_h_block,model3_LFD_h_block,
+          transform=NULL,show.intercept=F,show.ci=F,show.se=T,show.stat=T,
+          show.r2=T,show.icc=F,show.re.var=F,show.ngroups=F,digits=3,
+          dv.labels=c("FFD","MFD","LFD"),
+          file="output/tables/Table2_h_block.html")
+```
+
+## Hypothesis 2
+
+Genetic differentiation related to soil temperature involves also plasticity of development rate. Differences in phenology between high and low temperatures are predicted to be smaller for plants with parents from warm soils than for plants from colder soils.
+
+### Models temperatures sire and dam
+
+```{r}
+model4_FFD_block<-lmer(FFD~treat*(temp_sire+temp_dam)+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam)+(1|block),
+                  data_exp_blocks)
+model4_LFD_block<-lmer(LFD~treat*(temp_sire+temp_dam)+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam)+(1|block),
+                  data_exp_blocks)
+model4_MFD_block<-lmer(MFD~treat*(temp_sire+temp_dam)+
+                    (1|sire)+(1|dam)+
+                    (1|sire:dam)+(1|block),
+                  subset(data_exp_blocks,!is.na(MFD)))
+summary(model4_FFD_block)
+summary(model4_LFD_block)
+summary(model4_MFD_block)
+# All singular fit!
+```
 
 # Session info
 
